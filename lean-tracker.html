@@ -117,6 +117,7 @@ h1.brand{line-height:0}
 .pbx.win{background:#14634a;border-color:#2fbf8c;color:#c9f3e2} .pbx.win b,.pbx.win em{color:#7ff0c3}
 .pbx.lose{background:#6a211b;border-color:#ee6a5c;color:#ffd6d1} .pbx.lose b,.pbx.lose em{color:#ff9d92}
 .pbx.push{background:#5d4a07;border-color:#e8c442;color:#fbeab0} .pbx.push b,.pbx.push em{color:#ffd95c}
+.pbx.nobet{background:#1b2028;border-color:#2e3743;color:#8a96a5} .pbx.nobet b,.pbx.nobet em{color:#aab4c1}
 .pbx.main{box-shadow:0 0 0 1px rgba(255,255,255,.18)}
 .pbx:not(.main){opacity:.82}
 .foot{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:.74rem;color:var(--muted)}
@@ -160,7 +161,7 @@ footer{font-size:.76rem;color:var(--muted)}
   </div>
   <section id="sheetHost"></section>
   <main class="cards" id="cards"></main>
-  <footer>Scores and DraftKings lines come from ESPN's public scoreboard and refresh every 2 seconds while a pick is live. Spreads are judged on the current score against the line you saved. Totals are judged on Quant Pace, a projection built from how scoring actually unfolds in 1420 finished Division I games (11/01 to 11/25), including the late surge in close games. Straightline Pace is shown for comparison. Overtime uses the average scoring rate. Finished games use the final score. Tracking tool, not betting advice. Version Nov 26 c.</footer>
+  <footer>Scores and DraftKings lines come from ESPN's public scoreboard and refresh every 2 seconds while a pick is live. Spreads are judged on the current score against the line you saved. Totals are judged on Quant Pace, a projection built from how scoring actually unfolds in 1420 finished Division I games (11/01 to 11/25), including the late surge in close games. Straightline Pace is shown for comparison. Overtime uses the average scoring rate. Finished games use the final score. Tracking tool, not betting advice. Version Nov 26 e.</footer>
 </div>
 
 <script>
@@ -274,6 +275,10 @@ function grade(p, e) {
     if (e.period <= 2 && elapsedMin(e) < 3) result = "early";
     else { cover = p.dir === "over" ? quant - p.line : p.line - quant; result = Math.abs(cover) < 0.5 ? "push" : cover > 0 ? "win" : "lose"; }
     if (pace != null) { const sc = p.dir === "over" ? pace - p.line : p.line - pace; spResult = Math.abs(sc) < 0.5 ? "push" : sc > 0 ? "win" : "lose"; }
+  }
+  if (p.mkt === "S" && e.state === "in") {   // spread bets still show the pace projections (for in-game ideas), with no total bet attached
+    pace = paceOf(e, tot);
+    if (e.period > 2 || elapsedMin(e) >= 3) quant = quantProj(e, tot, Math.abs(e.away.score - e.home.score));
   }
   return { kind: e.state === "post" ? "final" : "live", result, cover, tot, pace, quant, spResult };
 }
@@ -442,7 +447,7 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
     return { main: e.displayClock || "0:00", sub: periodLabel(e), cls: "live", tick: true };
   }
   const logoHTML = t => '<span class="logo"><b>' + esc((t.abbr || t.name || "").slice(0, 4)) + "</b>" + (t.logo ? '<img src="' + esc(t.logo) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">' : "") + "</span>";
-  const WORD = { win: "WINNING", lose: "LOSING", push: "PUSH", early: "EARLY" };
+  const WORD = { win: "WINNING", lose: "LOSING", push: "PUSH", early: "EARLY", nobet: "NO BET" };
   const pbox = (label, v, res, main) => '<span class="pbx ' + (res || "early") + (main ? " main" : "") + '">' + label + "<b>" + f1(v) + "</b><em>" + (WORD[res] || "") + "</em></span>";
   function boardHTML(p, e, g) {
     const c = clockParts(e), started = e.state !== "pre", tied = e.away.score === e.home.score;
@@ -461,6 +466,9 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
       return '<div class="trow">' + logoHTML(t) + '<div class="tmw"><div class="tn">' + rk + esc(t.name) + '</div><div class="mas">' + esc(t.mascot) + (mine ? '<span class="pk">Pick ' + signed(p.line) + "</span>" : "") + "</div></div>" + lsCells(t) + '<div class="sc' + (started && !tied && t.score < other.score ? " dim" : "") + '">' + (started ? t.score : "–") + "</div></div>";
     }).join("");
     let btm = "";
+    if (p.mkt === "S" && g.kind === "live" && (g.quant != null || g.pace != null)) {
+      btm = '<div class="btm"><span>Total<b>' + g.tot + "</b></span>" + (g.quant != null ? pbox("Quant pace", g.quant, "nobet", true) : "") + (g.pace != null ? pbox("Straight pace", g.pace, "nobet", false) : "") + "</div>";
+    }
     if (p.mkt === "T") {
       btm = '<div class="btm"><span>Total<b>' + (started ? g.tot : "–") + "</b></span><span>" + (p.dir === "over" ? "Over" : "Under") + "<b>" + fmt(p.line) + "</b></span>" +
         (g.quant != null ? pbox("Quant pace", g.quant, g.result, true) : "") + (g.pace != null ? pbox("Straight pace", g.pace, g.spResult, false) : "") + "</div>";

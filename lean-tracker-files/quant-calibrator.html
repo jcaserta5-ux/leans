@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Quant Pace Calibrator</title>
+<style>
+/* Layout: one column. Controls and progress on top, then four charts and two tables once the run finishes. */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --ink:#17202a; --muted:#5b6673; --line:#dbe0e6;
+  --accent:#2f5fd0; --c0:#2f5fd0; --c1:#d9622b; --c2:#7a8594; --good:#12805c; --bad:#c23a2e;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11151b; --surface:#1a2029; --ink:#e7ebf0; --muted:#9aa6b4; --line:#2a323d;
+  --accent:#7da2f5; --c0:#7da2f5; --c1:#f08c5a; --c2:#9aa6b4; --good:#4cc79a; --bad:#f1857a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11151b; --surface:#1a2029; --ink:#e7ebf0; --muted:#9aa6b4; --line:#2a323d;
+  --accent:#7da2f5; --c0:#7da2f5; --c1:#f08c5a; --c2:#9aa6b4; --good:#4cc79a; --bad:#f1857a; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:max(16px,env(safe-area-inset-top,0px));padding-bottom:max(40px,env(safe-area-inset-bottom,0px))}
+.wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1{margin:0;font-size:1.6rem;line-height:1.1}
+h2{margin:0 0 6px;font-size:1.05rem}
+p{margin:0}
+.muted{color:var(--muted);font-size:.85rem}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:9px 14px;font-weight:600}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+:root[data-theme="dark"] button.primary{color:#0b1220}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) button.primary{color:#0b1220}}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input[type=number]{width:96px;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+progress{width:100%;height:10px;accent-color:var(--accent)}
+.log{font-size:.82rem;color:var(--muted);display:flex;flex-direction:column;gap:2px;font-variant-numeric:tabular-nums}
+.err{color:var(--bad)}
+.lg{display:flex;gap:6px 14px;flex-wrap:wrap;font-size:.82rem}
+.lg i{display:inline-block;width:18px;height:0;border-top:3px solid;vertical-align:middle;margin-right:6px}
+svg{width:100%;height:auto;display:block}
+svg text{fill:var(--muted);font:11px system-ui,sans-serif}
+.grid{stroke:var(--line);stroke-width:1}
+.zero{stroke:var(--muted);stroke-width:1.2}
+.ln{fill:none;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+.s0{stroke:var(--c0);fill:var(--c0)} .s1{stroke:var(--c1);fill:var(--c1)} .s2{stroke:var(--c2);fill:var(--c2)}
+path.ln{fill:none}
+.dash{stroke-dasharray:6 5}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:.85rem}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+td.better{color:var(--good);font-weight:700}
+textarea{width:100%;min-height:90px;font:12px ui-monospace,monospace;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Quant Pace Calibrator</h1>
+  <p class="muted">Downloads ESPN play-by-play for recently finished Division I games, measures how scoring really unfolds minute by minute (especially the last 3 minutes), and tests that against straight-line pace on games it did not train on. It uses every finished game this season, newest first, up to the number in the box (5,000 covers a full season). Open it from your GitHub page, ideally on a computer on Wi-Fi, and keep the screen on. Games are cached, so a stopped or repeated run picks up where it left off.</p>
+
+  <div class="card">
+    <div class="row">
+      <label for="n">Up to</label><input id="n" type="number" min="50" max="5000" step="50" value="5000"><span class="muted">games</span>
+      <button class="primary" id="run" type="button">Run calibration</button>
+      <button id="count" type="button">Count games</button>
+      <button id="stop" type="button" hidden>Stop</button>
+      <button id="reset" type="button">Clear cache</button>
+    </div>
+    <progress id="bar" value="0" max="1" hidden></progress>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div id="out" hidden>
+    <div class="card" id="sumCard"></div>
+  </div>
+  <div id="charts" style="display:flex;flex-direction:column;gap:14px"></div>
+  <div class="card" id="export" hidden>
+    <h2>Results to share</h2>
+    <p class="muted">Copy this and paste it into the chat, along with a screenshot of the charts.</p>
+    <div class="row"><button id="copy" type="button">Copy results</button><span class="muted" id="copied"></span></div>
+    <textarea id="json" readonly></textarea>
+  </div>
+</div>
+
+<script>
+(function () {
+"use strict";
+const ESPN = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball";
+const $ = id => document.getElementById(id);
+const G = 81, I0 = 6, FOLDS = 5;           // 30-second grid: index i = i*30 seconds into regulation
+const CK = "quantGames.v1";
+const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const f1 = n => (Number.isFinite(n) ? n.toFixed(1) : "–");
+const f2 = n => (Number.isFinite(n) ? n.toFixed(2) : "–");
+const etDate = d => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(d).replace(/-/g, "");
+let cache = {}; try { cache = JSON.parse(localStorage.getItem(CK) || "{}") || {}; } catch (e) { cache = {}; }
+const saveCache = () => { try { localStorage.setItem(CK, JSON.stringify(cache)); } catch (e) {} };
+let stopFlag = false, running = false;
+
+const log = (lines, errs) => { $("log").innerHTML = lines.map(l => "<div>" + esc(l) + "</div>").join("") + (errs || []).slice(0, 3).map(l => '<div class="err">' + esc(l) + "</div>").join(""); };
+
+async function fetchJSON(url, tries) {
+  let last;
+  for (let t = 0; t < (tries || 2); t++) {
+    const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 25000);
+    try { const r = await fetch(url, { signal: ctl.signal, cache: "no-store" }); if (!r.ok) throw new Error("HTTP " + r.status); return await r.json(); }
+    catch (e) { last = e; await new Promise(r => setTimeout(r, 400 * (t + 1))); }
+    finally { clearTimeout(to); }
+  }
+  throw last;
+}
+const parseClock = s => { s = String(s == null ? "" : s).trim(); const m = s.match(/^(\d+):(\d+(?:\.\d+)?)$/); if (m) return +m[1] * 60 + +m[2]; const f = parseFloat(s); return Number.isFinite(f) ? f : NaN; };
+
+// One game -> total points and margin at every 30 seconds of regulation, or null when the data is unusable.
+function extract(j) {
+  const raw = j.plays || (j.playByPlay && j.playByPlay.plays) || [];
+  const plays = raw.filter(p => p && p.period && (+p.period.number === 1 || +p.period.number === 2) && p.clock);
+  if (plays.length < 100) return null;
+  plays.sort((a, b) => num(a.sequenceNumber) - num(b.sequenceNumber));
+  const ev = []; let lastE = 0, lastT = 0;
+  for (const p of plays) {
+    const c = parseClock(p.clock.displayValue); if (!Number.isFinite(c)) continue;
+    const e = Math.max(lastE, (+p.period.number - 1) * 1200 + (1200 - c)), a = num(p.awayScore), h = num(p.homeScore), t = a + h;
+    if (t < lastT) continue;
+    ev.push([e, t, Math.abs(a - h)]); lastE = e; lastT = t;
+  }
+  if (ev.length < 100) return null;
+  const T = [], M = []; let k = 0, ct = 0, cm = 0;
+  for (let g = 0; g < G; g++) { while (k < ev.length && ev[k][0] <= g * 30) { ct = ev[k][1]; cm = ev[k][2]; k++; } T.push(ct); M.push(cm); }
+  if (T[80] < 70 || T[80] > 260 || T[80] < T[40]) return null;
+  return [T, M];
+}
+
+async function collect(N, errs) {
+  const ids = [], seen = new Set(), days = new Set(); let empty = 0, scanned = 0, first = null, lastD = null;
+  const nowET = etDate(new Date()), yr = +nowET.slice(0, 4), seasonStart = (+nowET.slice(4, 6) >= 8 ? yr : yr - 1) + "1101";
+  for (let d = 0; d < 300 && ids.length < N && !stopFlag; d++) {
+    const ds = etDate(new Date(Date.now() - d * 864e5)); if (ds < seasonStart) break; if (days.has(ds)) continue; days.add(ds);
+    let j; try { j = await fetchJSON(ESPN + "/scoreboard?dates=" + ds + "&groups=50&limit=400"); } catch (e) { errs.push("Scoreboard " + ds + ": " + (e && e.message)); scanned++; continue; }
+    scanned++;
+    const evs = (j.events || []).filter(e => e && e.status && e.status.type && e.status.type.completed);
+    if (!evs.length) { if (ids.length && ++empty >= 5) break; continue; } empty = 0;
+    for (const e of evs) { const id = String(e.id); if (!seen.has(id) && ids.length < N) { seen.add(id); ids.push(id); if (!first) first = ds; lastD = ds; } }
+    log(["Scanned " + scanned + " days, found " + ids.length + " finished games"], errs);
+  }
+  return { ids, first, lastD };
+}
+
+async function download(ids, errs, onTick) {
+  let i = 0, done = 0, bad = 0, sinceSave = 0;
+  const todo = ids.filter(id => !(id in cache));
+  async function worker() {
+    while (!stopFlag) {
+      const id = todo[i++]; if (id === undefined) return;
+      try { const j = await fetchJSON(ESPN + "/summary?event=" + id); const x = extract(j); cache[id] = x; if (!x) bad++; }
+      catch (e) { errs.push("Game " + id + ": " + (e && e.message)); bad++; }
+      done++; if (++sinceSave >= 25) { saveCache(); sinceSave = 0; } onTick(done, todo.length, bad);
+    }
+  }
+  if (todo.length) await Promise.all(Array.from({ length: 5 }, worker));
+  saveCache();
+  return { fetched: todo.length, bad };
+}
+
+// ---------- Model ----------
+function fit(train) {
+  const n = train.length, cum = new Array(G).fill(0), remAll = new Array(G).fill(0);
+  const remB = { le: new Array(G).fill(0), gt: new Array(G).fill(0) }, cntB = { le: new Array(G).fill(0), gt: new Array(G).fill(0) };
+  for (const g of train) {
+    const F = g.T[80];
+    for (let i = 0; i < G; i++) { const r = F - g.T[i], b = g.M[i] <= 10 ? "le" : "gt"; cum[i] += g.T[i]; remAll[i] += r; remB[b][i] += r; cntB[b][i]++; }
+  }
+  for (let i = 0; i < G; i++) { cum[i] /= n; remAll[i] /= n; for (const b of ["le", "gt"]) remB[b][i] = cntB[b][i] ? remB[b][i] / cntB[b][i] : remAll[i]; }
+  return { n, cum, remAll, remB, cntB };
+}
+function quant(m, P, i, T, Mg) {
+  const r = (T + P.k) / (m.cum[i] + P.k), re = Math.max(0, 1 + P.a * (r - 1));
+  let rem = m.remAll[i];
+  if (i >= P.bf) { const b = Mg <= 10 ? "le" : "gt"; if (m.cntB[b][i] >= 25) rem = m.remB[b][i]; }
+  return T + re * rem;
+}
+const straight = (i, T) => T / (i * 30) * 2400;
+
+function backtest(games, models, P, detail) {
+  let ss = 0, cnt = 0;
+  const A = detail ? { n: new Array(G).fill(0), ss: [new Array(G).fill(0), new Array(G).fill(0)], bi: [new Array(G).fill(0), new Array(G).fill(0)],
+    bk: { le: { n: new Array(G).fill(0), ss: [new Array(G).fill(0), new Array(G).fill(0)] }, gt: { n: new Array(G).fill(0), ss: [new Array(G).fill(0), new Array(G).fill(0)] } } } : null;
+  games.forEach((g, idx) => {
+    const m = models[idx % FOLDS], F = g.T[80];
+    for (let i = I0; i < 80; i++) {
+      const q = quant(m, P, i, g.T[i], g.M[i]) - F; ss += q * q; cnt++;
+      if (A) {
+        const s = straight(i, g.T[i]) - F, b = g.M[i] <= 10 ? "le" : "gt";
+        A.n[i]++; A.ss[0][i] += s * s; A.ss[1][i] += q * q; A.bi[0][i] += s; A.bi[1][i] += q;
+        A.bk[b].n[i]++; A.bk[b].ss[0][i] += s * s; A.bk[b].ss[1][i] += q * q;
+      }
+    }
+  });
+  return { rmse: Math.sqrt(ss / cnt), A };
+}
+
+function analyze(games) {
+  const models = []; for (let f = 0; f < FOLDS; f++) models.push(fit(games.filter((_, i) => i % FOLDS !== f)));
+  let best = null;
+  for (const bf of [50, 60, 70, 74]) for (const k of [0, 30, 60, 120]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
+    const P = { bf, k, a }, r = backtest(games, models, P, false).rmse;
+    if (!best || r < best.rmse) best = { P, rmse: r };
+  }
+  const bt = backtest(games, models, best.P, true).A;
+  const full = fit(games), n = games.length;
+  // Straight-line baseline over the whole sample for the same grid points
+  const rm = (ss, c) => c ? Math.sqrt(ss / c) : NaN;
+  const rmseS = [], rmseQ = [], biasS = [], biasQ = [];
+  for (let i = 0; i < G; i++) { const c = bt.n[i]; rmseS.push(i < I0 || i > 79 ? NaN : rm(bt.ss[0][i], c)); rmseQ.push(i < I0 || i > 79 ? NaN : rm(bt.ss[1][i], c)); biasS.push(c ? bt.bi[0][i] / c : NaN); biasQ.push(c ? bt.bi[1][i] / c : NaN); }
+  // Scoring shape
+  const ppm = []; for (let m = 1; m <= 40; m++) ppm.push(games.reduce((s, g) => s + g.T[2 * m] - g.T[2 * m - 2], 0) / n);
+  const avgFinal = games.reduce((s, g) => s + g.T[80], 0) / n;
+  const first37 = games.reduce((s, g) => s + g.T[74], 0) / n / 74;               // points per 30 s over the first 37 minutes
+  const bucketOf = mg => mg <= 5 ? "0-5" : mg <= 10 ? "6-10" : mg <= 20 ? "11-20" : "21+";
+  const lb = {}, bins = { le: new Array(6).fill(0), gt: new Array(6).fill(0) }, bn = { le: 0, gt: 0 };
+  for (const g of games) {
+    const b = bucketOf(g.M[74]); lb[b] = lb[b] || { n: 0, pts: 0 }; lb[b].n++; lb[b].pts += g.T[80] - g.T[74];
+    const k2 = g.M[74] <= 10 ? "le" : "gt"; bn[k2]++; for (let j = 0; j < 6; j++) bins[k2][j] += g.T[75 + j] - g.T[74 + j];
+  }
+  for (const k2 of ["le", "gt"]) for (let j = 0; j < 6; j++) bins[k2][j] = bn[k2] ? bins[k2][j] / bn[k2] : NaN;
+  return { n, best, full, bt, rmseS, rmseQ, biasS, biasQ, ppm, avgFinal, first37, lb, bins, bn, bucketOf };
+}
+
+// ---------- Charts ----------
+const niceStep = r => { const p = Math.pow(10, Math.floor(Math.log10(r))), f = r / p; return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p; };
+function lineChart(o) {
+  const W = 640, H = 290, L = 44, R = 14, T = 12, B = 34, iw = W - L - R, ih = H - T - B, xs = o.xs;
+  const x0 = xs[0], x1 = xs[xs.length - 1]; let vals = []; o.series.forEach(s => s.vals.forEach(v => { if (Number.isFinite(v)) vals.push(v); }));
+  let y0 = o.ymin != null ? o.ymin : Math.min(...vals), y1 = o.ymax != null ? o.ymax : Math.max(...vals);
+  const pad = (y1 - y0) * 0.08 || 1; if (o.ymin == null) y0 -= pad; if (o.ymax == null) y1 += pad;
+  const sx = v => L + (v - x0) / (x1 - x0 || 1) * iw, sy = v => T + (1 - (v - y0) / (y1 - y0)) * ih, st = niceStep((y1 - y0) / 5);
+  let g = "";
+  for (let v = Math.ceil(y0 / st) * st; v <= y1 + 1e-9; v += st) g += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + sy(v) + '" y2="' + sy(v) + '"/><text x="' + (L - 6) + '" y="' + (sy(v) + 4) + '" text-anchor="end">' + esc(+v.toFixed(2)) + "</text>";
+  if (y0 < 0 && y1 > 0) g += '<line class="zero" x1="' + L + '" x2="' + (W - R) + '" y1="' + sy(0) + '" y2="' + sy(0) + '"/>';
+  (o.xticks || []).forEach(t => { g += '<text x="' + sx(t.x) + '" y="' + (H - 14) + '" text-anchor="middle">' + esc(t.label) + "</text>"; });
+  g += '<text x="' + (L + iw / 2) + '" y="' + (H - 1) + '" text-anchor="middle">' + esc(o.xlabel || "") + "</text>";
+  o.series.forEach((s, k) => {
+    let d = ""; s.vals.forEach((v, i) => { if (Number.isFinite(v)) d += (d ? "L" : "M") + sx(xs[i]).toFixed(1) + " " + sy(v).toFixed(1); });
+    g += '<path class="ln s' + s.c + (s.dash ? " dash" : "") + '" d="' + d + '"/>';
+    if (s.dots) s.vals.forEach((v, i) => { if (Number.isFinite(v)) g += '<circle class="s' + s.c + '" cx="' + sx(xs[i]).toFixed(1) + '" cy="' + sy(v).toFixed(1) + '" r="3.6"/>'; });
+  });
+  const lg = o.series.map(s => '<span><i class="s' + s.c + '" style="border-color:var(--c' + s.c + ');' + (s.dash ? "border-top-style:dashed" : "") + '"></i>' + esc(s.name) + "</span>").join("");
+  return '<div class="card"><h2>' + esc(o.title) + '</h2><div class="muted">' + esc(o.sub || "") + '</div><div class="lg">' + lg + '</div><svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(o.title) + '">' + g + "</svg></div>";
+}
+function table(head, rows, boldBetter) {
+  return '<div class="tbl"><table><thead><tr>' + head.map(h => "<th>" + esc(h) + "</th>").join("") + "</tr></thead><tbody>" + rows.map(r => "<tr>" + r.map(c => "<td" + (c && c.cls ? ' class="' + c.cls + '"' : "") + ">" + esc(c && c.t != null ? c.t : c) + "</td>").join("") + "</tr>").join("") + "</tbody></table></div>";
+}
+
+function render(R, meta) {
+  const { n, best, bt } = R, P = best.P;
+  const mins = []; for (let i = I0; i < 80; i++) mins.push(i / 2);
+  const slice = a => a.slice(I0, 80);
+  const tick5 = []; for (let m = 5; m <= 40; m += 5) tick5.push({ x: m, label: String(m) });
+  $("out").hidden = false;
+  $("sumCard").innerHTML = "<h2>" + n + " finished Division I games</h2><p class='muted'>" + esc(meta.range) + ". Regulation only; overtime is cut off at 40:00. Average final total " + f1(R.avgFinal) + ", or " + f2(R.avgFinal / 40) + " points per minute. Quant settings chosen by cross-validation: tempo weight " + P.a + ", prior strength " + P.k + " points, margin split from minute " + (P.bf / 2) + ".</p>";
+  const out = [];
+  out.push(lineChart({ title: "Points per minute, by minute of the game", sub: "Straight-line pace assumes every minute scores the same.", xs: Array.from({ length: 40 }, (_, i) => i + 1), xlabel: "Minute of regulation (20 = end of first half)", xticks: tick5, ymin: 0,
+    series: [{ name: "Actual average", c: 0, vals: R.ppm }, { name: "Straightline (flat)", c: 2, dash: true, vals: R.ppm.map(() => R.avgFinal / 40) }] }));
+  const binX = [1, 2, 3, 4, 5, 6], lbl = ["3:00", "2:30", "2:00", "1:30", "1:00", "0:30"];
+  out.push(lineChart({ title: "Last 3 minutes: points per 30 seconds", sub: "Split by the margin when 3:00 was left. Dashed line is the average over the first 37 minutes (" + R.bn.le + " games within 10, " + R.bn.gt + " not).", xs: binX, xlabel: "Time left at the start of each 30-second block", xticks: binX.map((x, i) => ({ x, label: lbl[i] })), ymin: 0,
+    series: [{ name: "Within 10 points", c: 1, dots: true, vals: R.bins.le }, { name: "More than 10 points", c: 0, dots: true, vals: R.bins.gt }, { name: "First 37 min average", c: 2, dash: true, vals: binX.map(() => R.first37) }] }));
+  out.push(lineChart({ title: "Projection error by minute (RMSE, points)", sub: "How far the projected final total lands from the real final total. Lower is better. Quant is scored on games it was not trained on.", xs: mins, xlabel: "Minute of regulation", xticks: tick5, ymin: 0,
+    series: [{ name: "Straightline Pace", c: 2, vals: slice(R.rmseS) }, { name: "Quant Pace", c: 0, vals: slice(R.rmseQ) }] }));
+  out.push(lineChart({ title: "Projection bias by minute (average projected minus actual)", sub: "Above zero means projecting too high, below zero too low.", xs: mins, xlabel: "Minute of regulation", xticks: tick5,
+    series: [{ name: "Straightline Pace", c: 2, vals: slice(R.biasS) }, { name: "Quant Pace", c: 0, vals: slice(R.biasQ) }] }));
+  const cps = [5, 10, 15, 20, 25, 30, 35, 37, 38, 39];
+  const better = (a, b) => (a < b ? { t: f1(a), cls: "better" } : f1(a));
+  const t1 = table(["Minute", "RMSE straight", "RMSE quant", "Bias straight", "Bias quant"], cps.map(m => { const i = m * 2; return [m === 20 ? "20 (half)" : String(m), f1(R.rmseS[i]), better(R.rmseQ[i], R.rmseS[i]), f1(R.biasS[i]), f1(R.biasQ[i])]; }));
+  const t2 = table(["Margin at 3:00 left", "Games", "Pts last 3 min", "Pts per min", "vs first 37 min"], ["0-5", "6-10", "11-20", "21+"].map(b => { const x = R.lb[b] || { n: 0, pts: 0 }, avg = x.n ? x.pts / x.n : NaN; return [b === "21+" ? "21 or more" : b.replace("-", " to "), String(x.n), f1(avg), f2(avg / 3), x.n ? f2(avg / 3 / (R.first37 * 2)) + "x" : "–"]; }));
+  const rows3 = []; for (const [lab, i] of [["3:00 left", 74], ["2:00 left", 76], ["1:00 left", 78]]) for (const [bn, key] of [["within 10", "le"], ["over 10", "gt"]]) {
+    const c = bt.bk[key].n[i]; if (!c) continue; const s = Math.sqrt(bt.bk[key].ss[0][i] / c), q = Math.sqrt(bt.bk[key].ss[1][i] / c); rows3.push([lab + ", " + bn, String(c), f1(s), better(q, s)]);
+  }
+  const t3 = table(["Late-game state", "Games", "RMSE straight", "RMSE quant"], rows3);
+  out.push('<div class="card"><h2>Checkpoints</h2>' + t1 + "</div>");
+  out.push('<div class="card"><h2>How the last 3 minutes scored</h2>' + t2 + '<div class="muted">"vs first 37 min" compares the last-3-minute scoring rate with the rate earlier in the game. Above 1.00x means the end of the game scores faster.</div></div>');
+  out.push('<div class="card"><h2>Late-game projection error by game state</h2>' + t3 + "</div>");
+  $("charts").innerHTML = out.join("");
+  const r1 = v => (Number.isFinite(v) ? Math.round(v * 100) / 100 : null), arr = a => a.map(r1);
+  const result = { version: 1, builtAt: new Date().toISOString(), games: n, range: meta.range, gridSeconds: 30, params: P, avgFinal: r1(R.avgFinal), ppm: arr(R.ppm),
+    cum: arr(R.full.cum), remAll: arr(R.full.remAll), remLe: arr(R.full.remB.le), remGt: arr(R.full.remB.gt), cntLe: R.full.cntB.le, cntGt: R.full.cntB.gt,
+    last3: { first37PerHalfMin: r1(R.first37), within10: arr(R.bins.le), over10: arr(R.bins.gt), nWithin10: R.bn.le, nOver10: R.bn.gt },
+    backtest: { rmseStraight: arr(R.rmseS), rmseQuant: arr(R.rmseQ), biasStraight: arr(R.biasS), biasQuant: arr(R.biasQ) } };
+  try { localStorage.setItem("quantCal.v1", JSON.stringify(result)); } catch (e) {}
+  $("json").value = JSON.stringify(result);
+  $("export").hidden = false;
+}
+
+async function run() {
+  if (running) return; running = true; stopFlag = false;
+  $("run").disabled = true; $("stop").hidden = false; $("bar").hidden = false; $("bar").value = 0; $("out").hidden = true; $("charts").innerHTML = ""; $("export").hidden = true;
+  const errs = [], N = Math.max(50, Math.min(5000, parseInt($("n").value, 10) || 500));
+  try {
+    log(["Finding finished games…"], errs);
+    const { ids, first, lastD } = await collect(N, errs);
+    if (!ids.length) { log(["No finished games found. If this page was opened from a preview or from Files, open it from your GitHub site instead."], errs); return; }
+    const need = ids.filter(id => !(id in cache)).length;
+    log(["Found " + ids.length + " games (" + need + " to download, " + (ids.length - need) + " cached)."], errs);
+    const info = await download(ids, errs, (d, t, b) => { $("bar").value = d / t; log(["Downloaded " + d + " of " + t + " play-by-play files" + (b ? " (" + b + " unusable)" : "")], errs); });
+    if (stopFlag) { log(["Stopped. Downloaded games are cached; press Run to continue."], errs); return; }
+    const games = ids.map(id => cache[id]).filter(Boolean).map(a => ({ T: a[0], M: a[1] }));
+    if (games.length < 30) { log(["Only " + games.length + " usable games. Check your connection and run again."], errs); return; }
+    log(["Analyzing " + games.length + " games…"], errs); await new Promise(r => setTimeout(r, 30));
+    const R = analyze(games), fmtD = d => d.slice(4, 6) + "/" + d.slice(6);
+    render(R, { range: "Games from " + fmtD(lastD) + " to " + fmtD(first) });
+    log(["Done. " + games.length + " games used" + (ids.length - games.length ? ", " + (ids.length - games.length) + " skipped for missing or inconsistent data" : "") + "."], errs);
+    $("bar").hidden = true;
+  } catch (e) { log(["Something failed: " + (e && e.message ? e.message : e)], errs); }
+  finally { running = false; $("run").disabled = false; $("stop").hidden = true; }
+}
+async function countOnly() {
+  if (running) return; running = true; stopFlag = false; $("run").disabled = true; $("count").disabled = true; $("stop").hidden = false;
+  const errs = [];
+  try {
+    log(["Counting finished games…"], errs);
+    const { ids, first, lastD } = await collect(100000, errs), fmtD = d => d.slice(4, 6) + "/" + d.slice(6);
+    if (!ids.length) { log(["No finished games found. If this page was opened from a preview or from Files, open it from your GitHub site instead."], errs); return; }
+    const cached = ids.filter(id => id in cache).length;
+    $("n").value = Math.min(5000, ids.length);
+    log(["Season to date: " + ids.length + " finished Division I games, from " + fmtD(lastD) + " to " + fmtD(first) + ".", cached + " already cached on this device, " + (ids.length - cached) + " to download.", "The Games box is set to " + Math.min(5000, ids.length) + ". Tap Run calibration to use them all."], errs);
+  } catch (e) { log(["Something failed: " + (e && e.message ? e.message : e)], errs); }
+  finally { running = false; $("run").disabled = false; $("count").disabled = false; $("stop").hidden = true; }
+}
+$("count").addEventListener("click", countOnly);
+$("run").addEventListener("click", run);
+$("stop").addEventListener("click", () => { stopFlag = true; });
+$("reset").addEventListener("click", () => { cache = {}; try { localStorage.removeItem(CK); } catch (e) {} log(["Cache cleared."]); });
+$("copy").addEventListener("click", async () => {
+  const t = $("json").value; let ok = false;
+  try { await navigator.clipboard.writeText(t); ok = true; } catch (e) { try { $("json").select(); ok = document.execCommand("copy"); } catch (e2) {} }
+  $("copied").textContent = ok ? "Copied." : "Select the text below and copy it.";
+});
+})();
+</script>
+</body>
+</html>

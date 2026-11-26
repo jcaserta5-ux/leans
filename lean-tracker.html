@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lean Tracker">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f3f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#11151b" media="(prefers-color-scheme: dark)">
+<title>CBB Lean Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column. Summary strip, then pick cards (live first), then an add sheet. */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --ink:#17202a; --muted:#5b6673; --line:#dbe0e6;
+  --accent:#2f5fd0; --accent-soft:#e8eefc;
+  --win:#12805c; --win-soft:#e1f4ec; --lose:#c23a2e; --lose-soft:#fbe9e7;
+  --push:#8a6a00; --push-soft:#fbf1d3; --idle:#5b6673; --idle-soft:#eceff3;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11151b; --surface:#1a2029; --ink:#e7ebf0; --muted:#9aa6b4; --line:#2a323d;
+  --accent:#7da2f5; --accent-soft:#1c2a47;
+  --win:#4cc79a; --win-soft:#12312a; --lose:#f1857a; --lose-soft:#3a1e1b;
+  --push:#e2bf55; --push-soft:#35301a; --idle:#9aa6b4; --idle-soft:#232a33; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11151b; --surface:#1a2029; --ink:#e7ebf0; --muted:#9aa6b4; --line:#2a323d;
+  --accent:#7da2f5; --accent-soft:#1c2a47;
+  --win:#4cc79a; --win-soft:#12312a; --lose:#f1857a; --lose-soft:#3a1e1b;
+  --push:#e2bf55; --push-soft:#35301a; --idle:#9aa6b4; --idle-soft:#232a33; color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:max(16px,env(safe-area-inset-top,0px));padding-bottom:max(40px,env(safe-area-inset-bottom,0px))}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{margin:0;font:700 2rem/1 var(--display);letter-spacing:.01em}
+h1 span{color:var(--accent)}
+.sync{font-size:.78rem;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.sync b{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--idle);margin-right:6px}
+.sync.live b{background:var(--win);animation:pulse 1.6s ease-in-out infinite}
+.sync.err b{background:var(--lose)}
+@keyframes pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.sync.live b{animation:none}}
+.strip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 8px;text-align:center;min-width:0}
+.tile .n{font:700 1.9rem/1 var(--display);font-variant-numeric:tabular-nums}
+.tile .l{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.tile.w .n{color:var(--win)} .tile.l .n{color:var(--lose)}
+.bar{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 12px;font-weight:600;font-size:.85rem}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+:root[data-theme="dark"] .btn.primary{color:#0b1220}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.primary{color:#0b1220}}
+.btn.ghost{background:transparent}
+.btn:disabled{opacity:.5}
+.cards{display:flex;flex-direction:column;gap:10px}
+.group-h{font-size:.7rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:6px 2px 0;font-weight:600}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.pickline{font-weight:600;font-size:1.05rem;min-width:0;overflow-wrap:anywhere}
+.mk{display:inline-block;font:600 .64rem var(--body);text-transform:uppercase;letter-spacing:.07em;padding:1px 6px;border-radius:4px;margin-right:6px;vertical-align:2px;background:var(--idle-soft);color:var(--muted)}
+.x{border:0;background:transparent;color:var(--muted);font-size:.8rem;padding:2px 4px;flex:none}
+.x.armed{color:var(--lose);font-weight:600}
+.verdict-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.verdict{font:700 1.25rem/1 var(--display);letter-spacing:.05em;padding:6px 10px;border-radius:6px;background:var(--idle-soft);color:var(--idle)}
+.card.win .verdict{background:var(--win-soft);color:var(--win)}
+.card.lose .verdict{background:var(--lose-soft);color:var(--lose)}
+.card.push .verdict{background:var(--push-soft);color:var(--push)}
+.delta{font-size:.88rem;color:var(--muted)}
+.score{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-variant-numeric:tabular-nums;border-top:1px solid var(--line);padding-top:8px;font-size:.92rem}
+.score .t{font:600 1.15rem var(--display);letter-spacing:.02em}
+.score .clock{color:var(--muted);font-size:.8rem;white-space:nowrap}
+.note{font-size:.8rem;color:var(--muted)}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:22px 16px;text-align:center;color:var(--muted)}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.tabs{display:flex;gap:6px}
+.tabs button{flex:1;padding:8px;border:1px solid var(--line);background:transparent;border-radius:8px;font-weight:600;font-size:.85rem}
+.tabs button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+textarea,input[type=text],input[type=number],input[type=search]{width:100%;font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+textarea{min-height:110px;resize:vertical}
+.hint{font-size:.78rem;color:var(--muted)}
+.res{font-size:.82rem;display:flex;flex-direction:column;gap:3px}
+.res .bad{color:var(--lose)}
+.glist{display:flex;flex-direction:column;gap:6px;max-height:420px;overflow-y:auto}
+.g{border:1px solid var(--line);border-radius:9px}
+.g>button{width:100%;text-align:left;border:0;background:transparent;padding:9px 10px;display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.g .m{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.g .tm{font-size:.78rem;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.gp{padding:0 10px 10px;display:flex;flex-direction:column;gap:8px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.row.l{grid-template-columns:90px 1fr 1fr}
+.row label{font-size:.72rem;color:var(--muted);align-self:center}
+footer{font-size:.76rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>CBB <span>Lean Tracker</span></h1>
+    <div class="sync" id="sync"><b></b><span id="syncText">Loading</span></div>
+  </header>
+  <section class="strip" aria-label="Summary" id="strip"></section>
+  <div class="bar">
+    <button class="btn primary" id="addBtn" type="button">Add leans</button>
+    <button class="btn" id="refreshBtn" type="button">Refresh</button>
+    <button class="btn ghost" id="clearBtn" type="button">Clear finished</button>
+  </div>
+  <section id="sheetHost"></section>
+  <main class="cards" id="cards"></main>
+  <footer>Scores and DraftKings lines come from ESPN's public scoreboard and update every 20 to 60 seconds. Spread and total results are measured against the line you saved, not the current line. Tracking tool, not betting advice.</footer>
+</div>
+
+<script>
+//#core-start
+const ESPN = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard";
+const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const fmt = n => { const a = Math.abs(n); return Number.isInteger(a) ? String(a) : String(Math.round(a * 10) / 10); };
+const signed = n => (n > 0 ? "+" : n < 0 ? "−" : "") + (n === 0 ? "PK" : fmt(n));
+const norm = s => String(s || "").toLowerCase().replace(/−|–/g, "-").replace(/&/g, " and ").replace(/['’]/g, "").replace(/(?:\.(?!\d))|(?:(?<!\d)\.)/g, "").replace(/\bsaint\b/g, "st").replace(/[^a-z0-9()+\-.\s]/g, " ").replace(/\s+/g, " ").trim();
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const etDate = d => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(d).replace(/-/g, "");
+
+function parseTeam(c) {
+  const t = c.team || {};
+  return { id: String(t.id), score: num(c.score), name: t.shortDisplayName || t.location || t.displayName || t.abbreviation,
+    abbr: t.abbreviation || "", srcs: [t.location, t.shortDisplayName].filter(Boolean), rawAliases: [t.location, t.shortDisplayName, t.displayName, t.name, t.abbreviation].map(norm).filter(a => a.length >= 3) };
+}
+function parseEvent(ev) {
+  const comp = (ev.competitions || [])[0] || {};
+  const cs = comp.competitors || [];
+  const h = cs.find(c => c.homeAway === "home"), a = cs.find(c => c.homeAway === "away");
+  if (!h || !a) return null;
+  const st = (ev.status || comp.status || {}), ty = st.type || {};
+  const odds = (comp.odds || [])[0] || {};
+  const e = { id: String(ev.id), start: ev.date, date: etDate(new Date(ev.date)), state: ty.state || "pre", statusName: ty.name || "",
+    detail: ty.shortDetail || ty.detail || "", period: num(st.period), clock: num(st.clock), displayClock: st.displayClock || "",
+    away: parseTeam(a), home: parseTeam(h), total: odds.overUnder != null ? num(odds.overUnder) : null, favAbbr: null, favLine: null };
+  const m = String(odds.details || "").match(/^(.+?)\s+(-\d+(?:\.\d+)?)$/);
+  if (m) { e.favAbbr = m[1].trim(); e.favLine = num(m[2]); }
+  else if (/^(even|pk|pick)/i.test(String(odds.details || ""))) { e.favAbbr = ""; e.favLine = 0; }
+  return e;
+}
+function lineFor(e, team) {
+  if (e.favLine == null) return null;
+  if (e.favLine === 0) return 0;
+  return e.favAbbr === team.abbr ? e.favLine : -e.favLine;
+}
+// Aliases that point at more than one team on the slate are dropped so "Bulldogs" never guesses.
+function buildAliases(events) {
+  const owners = {};
+  for (const e of events) for (const t of [e.away, e.home]) for (const a of new Set(t.rawAliases)) (owners[a] = owners[a] || new Set()).add(t.id);
+  for (const e of events) for (const t of [e.away, e.home]) t.aliases = [...new Set(t.rawAliases)].filter(a => owners[a].size === 1).sort((x, y) => y.length - x.length);
+}
+function findAlias(text, team) {
+  for (const a of team.aliases || []) {
+    const m = new RegExp("(^|[^a-z0-9])" + a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "($|[^a-z0-9])").exec(text);
+    if (m) return m.index + m[1].length;
+  }
+  return -1;
+}
+function parseLine(raw, events) {
+  const text = norm(raw);
+  if (!text) return null;
+  const hits = events.map(e => ({ e, a: findAlias(text, e.away), h: findAlias(text, e.home) })).filter(x => x.a >= 0 || x.h >= 0);
+  if (!hits.length) return { error: "No matching game found" };
+  hits.sort((x, y) => ((y.a >= 0) + (y.h >= 0)) - ((x.a >= 0) + (x.h >= 0)));
+  const best = hits[0], e = best.e;
+  const base = { eventId: e.id, date: e.date, raw: raw.trim(), game: e.away.name + " @ " + e.home.name };
+  let m = text.match(/\b(over|under|o|u)\s*(\d{2,3}(?:\.\d+)?)\b/) || null, dir, line;
+  if (m) { dir = m[1][0] === "o" ? "over" : "under"; line = num(m[2]); }
+  else { m = text.match(/\b(\d{2,3}(?:\.\d+)?)\s*(over|under)\b/); if (m) { dir = m[2]; line = num(m[1]); } }
+  if (dir) return { ...base, mkt: "T", dir, line };
+  const sm = text.match(/(?:^|[\s(])([+-]\s?\d{1,2}(?:\.\d+)?)(?![\d])/);
+  const pk = /\b(pk|pick ?em|pickem)\b/.test(text);
+  if (!sm && !pk) return { error: "No spread or over/under found" };
+  line = pk && !sm ? 0 : num(sm[1].replace(/\s/g, ""));
+  const useAway = best.a >= 0 && (best.h < 0 || best.a <= best.h);
+  const t = useAway ? e.away : e.home;
+  return { ...base, mkt: "S", teamId: t.id, teamName: t.name, line };
+}
+function elapsedMin(e) {
+  if (e.state === "post") return 40;
+  if (e.state !== "in") return 0;
+  return e.period <= 2 ? (e.period - 1) * 20 + (1200 - e.clock) / 60 : 40 + (e.period - 3) * 5 + (300 - e.clock) / 60;
+}
+function grade(p, e) {
+  if (!e) return { kind: "missing" };
+  if (/POSTPONED|CANCELED|CANCELLED|FORFEIT/.test(e.statusName)) return { kind: "void" };
+  if (e.state === "pre") return { kind: "pending" };
+  const tot = e.away.score + e.home.score;
+  let cover;
+  if (p.mkt === "T") cover = p.dir === "over" ? tot - p.line : p.line - tot;
+  else {
+    const t = p.teamId === e.away.id ? e.away : e.home, o = t === e.away ? e.home : e.away;
+    cover = t.score + p.line - o.score;
+  }
+  const result = cover > 0 ? "win" : cover < 0 ? "lose" : "push";
+  let pace = null;
+  if (p.mkt === "T" && e.state === "in" && e.period <= 2) { const m = elapsedMin(e); if (m >= 4) pace = Math.round(tot / m * 40); }
+  return { kind: e.state === "post" ? "final" : "live", result, cover, tot, pace };
+}
+// ---- Parser for the VSiN "CBB Leans" page text (copy the page, paste here) ----
+const PHRASES = [[/\bva commonwealth\b/g, "vcu"], [/\bbrigham young\b/g, "byu"], [/\btexas el paso\b/g, "utep"], [/\bcsu (bakersfield|northridge|fullerton)\b/g, "cal state $1"],
+  [/\bsiu edwardsville\b/g, "siue"], [/\bnebraska omaha\b/g, "omaha"], [/\bmiss valley st\b/g, "mississippi valley state"], [/^mississippi$/g, "ole miss"],
+  [/\bark pine bluff\b/g, "arkansas pine bluff"], [/^connecticut$/g, "uconn"], [/\bflorida (intl|international)\b/g, "fiu"], [/\babilene chr\b/g, "abilene christian"],
+  [/\b(sc|usc|south carolina) upstate\b/g, "sc upstate"], [/\b(unc|north carolina) (wilmington|asheville|greensboro)\b/g, "unc $2"], [/\bst thomas (mn|minnesota)\b/g, "st thomas mn"],
+  [/\b(umkc|kansas city)\b/g, "kansas city"], [/\bsaint (louis|josephs|marys)\b/g, "st $1"]];
+const ALTS = { e: ["eastern", "east"], n: ["northern", "north"], s: ["southern", "south"], w: ["western", "west"], se: ["southeastern"], ne: ["northeastern"], st: ["state", "saint"], state: ["st"],
+  intl: ["international"], mn: ["minnesota"], fl: ["florida"], ga: ["georgia"], ark: ["arkansas"], miss: ["mississippi"], albany: ["ualbany"], ualbany: ["albany"], citadel: ["the"] };
+const toks = s => { let t = norm(s).replace(/[()]/g, " ").replace(/-/g, " ").replace(/\s+/g, " ").trim(); for (const [re, r] of PHRASES) t = t.replace(re, r); return t.split(" ").filter(Boolean); };
+function tokMatch(vt, tt) {
+  if (!vt.length || !tt.length) return 0;
+  const m = vt.filter(x => tt.includes(x) || (ALTS[x] || []).some(a => tt.includes(a))).length;
+  return m / Math.max(vt.length, tt.length);
+}
+function teamScore(name, team) {
+  const vt = toks(name);
+  return Math.max(...(team.srcs || []).map(s => tokMatch(vt, toks(s))), tokMatch(vt, toks(team.abbr)), 0);
+}
+function etMinutes(iso) {
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(iso));
+  return (+p.find(x => x.type === "hour").value % 24) * 60 + +p.find(x => x.type === "minute").value;
+}
+function tipMinutes(s) {
+  const m = String(s).match(/^(\d{1,2}):(\d{2})\s*([AP])M$/i); if (!m) return null;
+  return (+m[1] % 12 + (m[3].toUpperCase() === "P" ? 12 : 0)) * 60 + +m[2];
+}
+function gameScore(aw, ho, e, tip) {
+  const straight = [teamScore(aw, e.away), teamScore(ho, e.home)], flipped = [teamScore(aw, e.home), teamScore(ho, e.away)];
+  const s = Math.min(...straight) >= Math.min(...flipped) ? straight : flipped;
+  if (Math.min(...s) < 0.5) return 0;
+  const near = tip != null && Math.abs(etMinutes(e.start) - tip) <= 50;
+  return s[0] + s[1] + (near ? 0.2 : 0);
+}
+function bestGame(aw, ho, events, tip) {
+  let best = null, bs = 0;
+  for (const e of events) { const s = gameScore(aw, ho, e, tip); if (s > bs) { bs = s; best = e; } }
+  return bs >= 1.2 ? best : null;
+}
+const STOP = /^(no lean|from the|\d{1,2}:\d{2}\s*[AP]M(\s+window|\s+and later.*)?$)/i;
+function parseVSiN(text, events) {
+  const lines = String(text).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const results = []; let found = 0;
+  for (let i = 0; i < lines.length - 1; i++) {
+    if (!/^\d{1,2}:\d{2}\s*[AP]M$/i.test(lines[i]) || !/^(TOTAL|SIDE)/i.test(lines[i + 1])) continue;
+    found++;
+    const tip = lines[i], pl = lines[i + 1], gl = lines[i + 2] || "", prof = lines[i + 3] || "", why = [];
+    for (let j = i + 4; j < lines.length && why.length < 3 && !STOP.test(lines[j]); j++) why.push(lines[j]);
+    const raw = tip + " " + pl + " " + gl;
+    const gm = gl.match(/^(.+?)\s+@\s+(.+?)(?:\s*\(([^)]*)\))?$/);
+    if (!gm) { results.push({ raw, error: "Could not read the game line" }); continue; }
+    const aw = gm[1].trim(), ho = gm[2].trim(), tipMin = tipMinutes(tip);
+    const e = bestGame(aw, ho, events, tipMin);
+    if (!e) { results.push({ raw: aw + " @ " + ho + " (" + tip + ")", error: "No matching ESPN game on this date" }); continue; }
+    const base = { eventId: e.id, date: e.date, game: e.away.name + " @ " + e.home.name, raw, tip, prof, why: why.join("; "), src: "vsin" };
+    let m = pl.match(/^TOTAL\s*(over|under)\s*(\d+(?:\.\d+)?)/i);
+    if (m) { results.push({ pick: { ...base, mkt: "T", dir: m[1].toLowerCase(), line: num(m[2]) } }); continue; }
+    m = pl.match(/^SIDE\s*(.+?)\s*([+\-−]\s?\d+(?:\.\d+)?)\s*$/i);
+    if (!m) { results.push({ raw: pl, error: "Could not read the pick" }); continue; }
+    const pickName = m[1].trim(), line = num(m[2].replace(/−/g, "-").replace(/\s/g, ""));
+    const sim = n => { const a = toks(pickName), b = toks(n); return Math.max(tokMatch(a, b), tokMatch(b, a)); };
+    const sa = Math.max(sim(aw), teamScore(pickName, e.away) * 0.99), sh = Math.max(sim(ho), teamScore(pickName, e.home) * 0.99);
+    if (Math.abs(sa - sh) < 0.01) { results.push({ raw: pl, error: "Could not tell which team the pick is on" }); continue; }
+    const awayPick = sa > sh;
+    // The pick name is matched against the VSiN game line, then mapped to the ESPN team in the same slot.
+    const flipped = teamScore(aw, e.home) > teamScore(aw, e.away);
+    const t = (awayPick !== flipped) ? e.away : e.home;
+    results.push({ pick: { ...base, mkt: "S", teamId: t.id, teamName: t.name, line } });
+  }
+  return { found, results };
+}
+//#core-end
+
+(function () {
+  const $ = id => document.getElementById(id);
+  const KEY = "cbbLeans.v1";
+  const S = { picks: [], events: new Map(), byDate: {}, sheet: null, tab: "paste", viewDate: etDate(new Date()), open: null, armed: null, timer: null, lastOk: null, err: null, results: [], loading: false };
+  const today = () => etDate(new Date());
+  const addDays = (d, n) => { const t = new Date(Date.UTC(+d.slice(0,4), +d.slice(4,6) - 1, +d.slice(6,8), 12)); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0,10).replace(/-/g, ""); };
+  const load = () => { try { const r = JSON.parse(localStorage.getItem(KEY) || "[]"); if (Array.isArray(r)) S.picks = r; } catch (e) {} };
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S.picks)); } catch (e) {} };
+  const tm = iso => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+  async function fetchDate(d) {
+    const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 12000);
+    try {
+      const r = await fetch(ESPN + "?dates=" + d + "&groups=50&limit=400", { signal: ctl.signal, cache: "no-store" });
+      if (!r.ok) throw new Error("ESPN returned " + r.status);
+      const j = await r.json();
+      const evs = (j.events || []).map(parseEvent).filter(Boolean);
+      buildAliases(evs);
+      S.byDate[d] = evs.map(e => e.id);
+      for (const e of evs) S.events.set(e.id, e);
+    } finally { clearTimeout(to); }
+  }
+  function neededDates() { const s = new Set(S.picks.map(p => p.date)); s.add(today()); if (S.sheet) s.add(S.viewDate); return [...s]; }
+  async function refresh() {
+    if (S.loading) return;
+    S.loading = true; $("refreshBtn").disabled = true;
+    try { await Promise.all(neededDates().map(fetchDate)); S.lastOk = new Date(); S.err = null; }
+    catch (e) { S.err = e && e.name === "AbortError" ? "ESPN timed out" : (e && e.message) || "Network error"; }
+    S.loading = false; $("refreshBtn").disabled = false;
+    render(); schedule();
+  }
+  function anyLive() { return S.picks.some(p => { const e = S.events.get(p.eventId); return e && e.state === "in"; }); }
+  function soon() { return S.picks.some(p => { const e = S.events.get(p.eventId); return e && e.state === "pre" && new Date(e.start) - Date.now() < 45 * 60000; }); }
+  function schedule() {
+    clearTimeout(S.timer);
+    if (document.hidden) return;
+    S.timer = setTimeout(refresh, anyLive() ? 20000 : soon() ? 30000 : 60000);
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); else clearTimeout(S.timer); });
+
+  function cardHTML(p) {
+    const e = S.events.get(p.eventId), g = grade(p, e);
+    const pickText = p.mkt === "T" ? (p.dir === "over" ? "Over " : "Under ") + fmt(p.line) : p.teamName + " " + signed(p.line);
+    const game = e ? e.away.name + " @ " + e.home.name : p.game;
+    let cls = "idle", verdict = "PENDING", delta = "", scoreRow = "";
+    if (g.kind === "missing") { verdict = "NO DATA"; delta = "Game not on ESPN's scoreboard for " + p.date.slice(4,6) + "/" + p.date.slice(6) + " yet."; }
+    else if (g.kind === "void") { verdict = "NO ACTION"; delta = e.detail || "Postponed or canceled."; }
+    else if (g.kind === "pending") { verdict = "NOT STARTED"; delta = "Tips " + tm(e.start); }
+    else {
+      const fin = g.kind === "final";
+      cls = g.result;
+      verdict = fin ? (g.result === "win" ? "WON" : g.result === "lose" ? "LOST" : "PUSH") : (g.result === "win" ? "WINNING" : g.result === "lose" ? "LOSING" : "ON THE NUMBER");
+      if (g.result === "push") delta = fin ? "Final, graded as a push" : "Exactly on the line";
+      else if (p.mkt === "T") delta = (fin ? "Final total " : "Total ") + g.tot + ", " + fmt(g.cover) + (g.cover > 0 ? " on the right side of " : " on the wrong side of ") + fmt(p.line) + (g.pace ? ". On pace for " + g.pace : "");
+      else delta = (g.cover > 0 ? (fin ? "Covered by " : "Covering by ") : (fin ? "Missed by " : "Behind by ")) + fmt(g.cover) + (fin ? "" : " vs your line");
+      if (g.result === "push" && p.mkt === "T" && g.pace) delta += ". On pace for " + g.pace;
+    }
+    if (e && g.kind !== "missing" && g.kind !== "pending" && g.kind !== "void") {
+      const live = e.state === "in";
+      scoreRow = '<div class="score"><span class="t">' + esc(e.away.abbr || e.away.name) + " " + e.away.score + " – " + e.home.score + " " + esc(e.home.abbr || e.home.name) + '</span><span class="clock">' + esc(live ? e.detail : "Final") + "</span></div>";
+    }
+    const armed = S.armed === p.id;
+    return '<article class="card ' + cls + '"><div class="top"><div class="pickline"><span class="mk">' + (p.mkt === "T" ? "Total" : "Side") + "</span>" + esc(pickText) +
+      '<div class="note">' + esc(game) + (p.prof ? " · " + esc(p.prof) + (p.why ? ": " + esc(p.why) : "") : "") + '</div></div><button class="x' + (armed ? " armed" : "") + '" data-rm="' + esc(p.id) + '" type="button">' + (armed ? "Remove?" : "Remove") + "</button></div>" +
+      '<div class="verdict-row"><span class="verdict">' + verdict + '</span><span class="delta">' + esc(delta) + "</span></div>" + scoreRow + "</article>";
+  }
+  function rank(p) { const e = S.events.get(p.eventId); return !e ? 3 : e.state === "in" ? 0 : e.state === "pre" ? 1 : 2; }
+
+  function renderCards() {
+    const picks = [...S.picks].sort((a, b) => rank(a) - rank(b) || String((S.events.get(a.eventId) || {}).start).localeCompare(String((S.events.get(b.eventId) || {}).start)));
+    if (!picks.length) { $("cards").innerHTML = '<div class="empty">No leans yet. Tap Add leans, paste the picks from your lean tables or choose games from today’s slate.</div>'; return; }
+    const names = ["Live", "Upcoming", "Final", "Unmatched"];
+    let html = "", last = -1;
+    for (const p of picks) { const r = rank(p); if (r !== last) { html += '<div class="group-h">' + names[r] + "</div>"; last = r; } html += cardHTML(p); }
+    $("cards").innerHTML = html;
+  }
+  function renderStrip() {
+    let w = 0, l = 0, pend = 0, fin = [0, 0, 0];
+    for (const p of S.picks) {
+      const g = grade(p, S.events.get(p.eventId));
+      if (g.kind === "live") { if (g.result === "win") w++; else if (g.result === "lose") l++; }
+      else if (g.kind === "final") { fin[g.result === "win" ? 0 : g.result === "lose" ? 1 : 2]++; }
+      else pend++;
+    }
+    $("strip").innerHTML = '<div class="tile w"><div class="n">' + w + '</div><div class="l">Winning</div></div><div class="tile l"><div class="n">' + l + '</div><div class="l">Losing</div></div><div class="tile"><div class="n">' + pend + '</div><div class="l">Pending</div></div><div class="tile"><div class="n">' + fin[0] + "-" + fin[1] + (fin[2] ? "-" + fin[2] : "") + '</div><div class="l">Final W-L' + (fin[2] ? "-P" : "") + "</div></div>";
+  }
+  function renderSync() {
+    const el = $("sync");
+    el.className = "sync" + (S.err ? " err" : anyLive() ? " live" : "");
+    $("syncText").textContent = S.err ? S.err + ". Retrying." : S.lastOk ? (anyLive() ? "Live · " : "") + S.lastOk.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }) : "Loading";
+  }
+
+  function chipsHTML() {
+    return '<div class="bar"><button class="btn" type="button" data-day="-1" aria-label="Previous day">‹</button><span class="btn ghost" style="border:0;align-self:center">' + (S.viewDate === today() ? "Today" : S.viewDate.slice(4,6) + "/" + S.viewDate.slice(6)) + '</span><button class="btn" type="button" data-day="1" aria-label="Next day">›</button></div>';
+  }
+  function sheetHTML() {
+    const tabs = '<div class="tabs"><button type="button" data-tab="paste" aria-pressed="' + (S.tab === "paste") + '">Paste leans</button><button type="button" data-tab="games" aria-pressed="' + (S.tab === "games") + '">Pick from games</button></div>';
+    if (S.tab === "paste") {
+      const res = S.results.map(r => '<div class="' + (r.error ? "bad" : "") + '">' + esc(r.error ? r.raw + " — " + r.error : "Added: " + r.msg) + "</div>").join("");
+      return '<div class="sheet">' + tabs + chipsHTML() + '<label class="hint" for="paste">Paste the whole CBB Leans page text, or one lean per line, for example: Belmont -4.5, Over 144.5 Charlotte Northern Iowa, Rice +4.5. Lines are matched to games on the ESPN slate for the date shown above (today by default). Pasting the page adds only the leans, not the info-only notes.</label><textarea id="paste" placeholder="Belmont -4.5&#10;Over 144.5 Northern Iowa Charlotte"></textarea><div class="bar"><button class="btn primary" id="doPaste" type="button">Add to tracker</button><button class="btn ghost" id="closeSheet" type="button">Close</button></div><div class="res">' + res + "</div></div>";
+    }
+    const evs = (S.byDate[S.viewDate] || []).map(id => S.events.get(id)).filter(Boolean);
+    const q = norm(($("gq") && $("gq").value) || S.q || "");
+    const list = evs.filter(e => !q || (e.away.rawAliases.concat(e.home.rawAliases).some(a => a.includes(q)))).sort((a, b) => a.start.localeCompare(b.start));
+    const items = list.map(e => {
+      const open = S.open === e.id;
+      const al = lineFor(e, e.away), hl = lineFor(e, e.home);
+      const panel = open ? '<div class="gp"><div class="row l"><label for="sp">Spread</label><input id="sp" type="number" step="0.5" inputmode="decimal" placeholder="" value="' + (al == null ? "" : al) + '" data-away="' + (al == null ? "" : al) + '"><span class="hint">for away team, home is the opposite</span></div><div class="row"><button class="btn" type="button" data-add="away" data-e="' + esc(e.id) + '">' + esc(e.away.name) + '</button><button class="btn" type="button" data-add="home" data-e="' + esc(e.id) + '">' + esc(e.home.name) + '</button></div><div class="row l"><label for="tt">Total</label><input id="tt" type="number" step="0.5" inputmode="decimal" value="' + (e.total == null ? "" : e.total) + '"><span></span></div><div class="row"><button class="btn" type="button" data-add="over" data-e="' + esc(e.id) + '">Over</button><button class="btn" type="button" data-add="under" data-e="' + esc(e.id) + '">Under</button></div></div>' : "";
+      return '<div class="g"><button type="button" data-open="' + esc(e.id) + '"><span class="m">' + esc(e.away.name) + " @ " + esc(e.home.name) + '</span><span class="tm">' + (e.state === "pre" ? tm(e.start) : e.state === "in" ? "Live" : "Final") + "</span></button>" + panel + "</div>";
+    }).join("");
+    const chips = '<div class="bar"><button class="btn" type="button" data-day="-1">‹</button><span class="btn ghost" style="border:0;align-self:center">' + (S.viewDate === today() ? "Today" : S.viewDate.slice(4,6) + "/" + S.viewDate.slice(6)) + '</span><button class="btn" type="button" data-day="1">›</button></div>';
+    return '<div class="sheet">' + tabs + chips + '<input type="search" id="gq" placeholder="Filter by team" value="' + esc(S.q || "") + '" aria-label="Filter by team"><div class="glist">' + (items || '<div class="empty">' + (S.byDate[S.viewDate] ? "No games found." : "Loading games…") + "</div>") + '</div><div class="hint">Lines are prefilled from DraftKings via ESPN. Change them to match the lean you were given.</div><div class="bar"><button class="btn ghost" id="closeSheet" type="button">Close</button></div></div>';
+  }
+  function renderSheet() {
+    if (!S.sheet) { $("sheetHost").innerHTML = ""; return; }
+    const keep = $("paste") ? $("paste").value : "";
+    const hadFocus = document.activeElement && document.activeElement.id === "gq";
+    $("sheetHost").innerHTML = sheetHTML();
+    if ($("paste")) $("paste").value = keep;
+    if (hadFocus && $("gq")) { const g = $("gq"); g.focus(); g.setSelectionRange(g.value.length, g.value.length); }
+  }
+  function render() { renderStrip(); renderCards(); renderSync(); if (S.sheet && !(document.activeElement && /^(sp|tt|gq|paste)$/.test(document.activeElement.id))) renderSheet(); }
+
+  function addPick(p) {
+    if (S.picks.some(x => x.eventId === p.eventId && x.mkt === p.mkt && x.line === p.line && x.teamId === p.teamId && x.dir === p.dir)) return false;
+    S.picks.push({ id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ...p }); save(); return true;
+  }
+  document.addEventListener("click", ev => {
+    const t = ev.target.closest("button"); if (!t) return;
+    if (t.id === "addBtn") { S.sheet = true; S.viewDate = today(); renderSheet(); refresh(); return; }
+    if (t.id === "closeSheet") { S.sheet = false; renderSheet(); return; }
+    if (t.id === "refreshBtn") { refresh(); return; }
+    if (t.id === "clearBtn") { S.picks = S.picks.filter(p => { const g = grade(p, S.events.get(p.eventId)); return g.kind !== "final" && g.kind !== "void"; }); save(); render(); return; }
+    if (t.dataset.rm) { if (S.armed === t.dataset.rm) { S.picks = S.picks.filter(p => p.id !== t.dataset.rm); S.armed = null; save(); } else S.armed = t.dataset.rm; render(); return; }
+    if (t.dataset.tab) { S.tab = t.dataset.tab; renderSheet(); return; }
+    if (t.dataset.open) { S.open = S.open === t.dataset.open ? null : t.dataset.open; renderSheet(); return; }
+    if (t.dataset.day) { S.viewDate = addDays(S.viewDate, +t.dataset.day); S.open = null; renderSheet(); refresh(); return; }
+    if (t.id === "doPaste") {
+      const evs = (S.byDate[S.viewDate] || []).map(id => S.events.get(id)).filter(Boolean);
+      const lines = $("paste").value.split(/\n+/).map(s => s.trim()).filter(Boolean);
+      if (!evs.length) { S.results = [{ raw: "", error: "No games loaded from ESPN yet. Check your connection and try again." }]; renderSheet(); refresh(); return; }
+      const vs = parseVSiN($("paste").value, evs);
+      if (vs.found) {
+        S.results = vs.results.map(r => {
+          if (r.error) return { raw: r.raw, error: r.error };
+          const p = r.pick, ok = addPick(p);
+          return { raw: "", msg: (p.mkt === "T" ? (p.dir === "over" ? "Over " : "Under ") + fmt(p.line) : p.teamName + " " + signed(p.line)) + " in " + p.game + (ok ? "" : " (already tracked)") };
+        });
+        S.results.unshift({ raw: "", msg: vs.results.filter(r => r.pick).length + " of " + vs.found + " leans matched to ESPN games" });
+        if (!vs.results.some(r => r.error)) $("paste").value = "";
+        render(); renderSheet(); schedule(); return;
+      }
+      S.results = lines.map(l => {
+        const p = parseLine(l, evs); if (!p) return null;
+        if (p.error) return { raw: l, error: p.error };
+        const ok = addPick(p);
+        return { raw: l, msg: (p.mkt === "T" ? (p.dir === "over" ? "Over " : "Under ") + fmt(p.line) : p.teamName + " " + signed(p.line)) + " in " + p.game + (ok ? "" : " (already tracked)") };
+      }).filter(Boolean);
+      $("paste").value = S.results.some(r => r.error) ? lines.filter((l, i) => S.results[i] && S.results[i].error).join("\n") : "";
+      render(); renderSheet(); return;
+    }
+    if (t.dataset.add) {
+      const e = S.events.get(t.dataset.e); if (!e) return;
+      const base = { eventId: e.id, date: e.date, game: e.away.name + " @ " + e.home.name, raw: "" };
+      const k = t.dataset.add;
+      if (k === "over" || k === "under") {
+        const v = parseFloat($("tt").value); if (!Number.isFinite(v)) return;
+        addPick({ ...base, mkt: "T", dir: k, line: v });
+      } else {
+        const v = parseFloat($("sp").value); if (!Number.isFinite(v)) return;
+        const team = k === "away" ? e.away : e.home;
+        addPick({ ...base, mkt: "S", teamId: team.id, teamName: team.name, line: k === "away" ? v : -v });
+      }
+      S.open = null; render(); renderSheet(); schedule(); return;
+    }
+  });
+  document.addEventListener("input", ev => { if (ev.target.id === "gq") { S.q = ev.target.value; const pos = ev.target.selectionStart; renderSheet(); const g = $("gq"); if (g) { g.focus(); g.setSelectionRange(pos, pos); } } });
+
+  load(); render(); refresh();
+})();
+</script>
+</body>
+</html>

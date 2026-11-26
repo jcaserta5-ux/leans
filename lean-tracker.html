@@ -19,6 +19,7 @@
   --accent:#2f5fd0; --accent-soft:#e8eefc;
   --win:#12805c; --win-soft:#e1f4ec; --lose:#c23a2e; --lose-soft:#fbe9e7;
   --push:#8a6a00; --push-soft:#fbf1d3; --idle:#5b6673; --idle-soft:#eceff3;
+  --board:#0e1218; --board-2:#171d27; --board-ink:#f2f5f9; --board-dim:#8d99aa; --board-line:#262e3b; --board-hot:#ff6a3d; --board-pick:#ffd166;
   --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
   color-scheme:light;
@@ -76,9 +77,32 @@ h1 span{color:var(--accent)}
 .card.lose .verdict{background:var(--lose-soft);color:var(--lose)}
 .card.push .verdict{background:var(--push-soft);color:var(--push)}
 .delta{font-size:.88rem;color:var(--muted)}
-.score{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-variant-numeric:tabular-nums;border-top:1px solid var(--line);padding-top:8px;font-size:.92rem}
-.score .t{font:600 1.15rem var(--display);letter-spacing:.02em}
-.score .clock{color:var(--muted);font-size:.8rem;white-space:nowrap}
+.board{background:var(--board);color:var(--board-ink);border-radius:10px;overflow:hidden}
+.btop{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 12px;background:var(--board-2);border-bottom:1px solid var(--board-line)}
+.cl-sub{font:600 .8rem var(--body);letter-spacing:.1em;color:var(--board-dim);text-transform:uppercase;white-space:nowrap}
+.cl-main{font:700 2.3rem/1 var(--display);font-variant-numeric:tabular-nums;letter-spacing:.02em;white-space:nowrap}
+.btop.live .cl-main{color:var(--board-hot)}
+.btop.live .cl-sub{color:var(--board-ink)}
+.livedot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--board-hot);margin-right:6px;animation:pulse 1.6s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.livedot{animation:none}}
+.trow{display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px 12px}
+.trow+.trow{border-top:1px solid var(--board-line)}
+.logo{position:relative;width:38px;height:38px;border-radius:50%;background:#fff;display:grid;place-items:center;overflow:hidden}
+.logo b{font:700 .72rem var(--display);color:#3a4350;letter-spacing:.02em}
+.logo.ok b{visibility:hidden}
+.logo img{position:absolute;inset:3px;width:calc(100% - 6px);height:calc(100% - 6px);object-fit:contain}
+.tmw{min-width:0}
+.tn{font:700 1.25rem/1.05 var(--display);letter-spacing:.02em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rk{color:var(--board-dim);font-size:.82rem;margin-right:5px}
+.mas{font-size:.72rem;color:var(--board-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pk{display:inline-block;font:700 .6rem var(--body);letter-spacing:.06em;background:var(--board-pick);color:#1b1500;border-radius:3px;padding:1px 5px;margin-left:6px;text-transform:uppercase}
+.sc{font:700 2.5rem/1 var(--display);font-variant-numeric:tabular-nums;min-width:2ch;text-align:right}
+.sc.dim{color:var(--board-dim)}
+.btm{display:flex;justify-content:space-around;gap:8px;padding:7px 12px;background:var(--board-2);border-top:1px solid var(--board-line);font-size:.74rem;color:var(--board-dim);text-transform:uppercase;letter-spacing:.07em}
+.btm b{display:block;font:700 1.2rem/1.1 var(--display);color:var(--board-ink);letter-spacing:.02em;text-align:center}
+.btm span{text-align:center}
+.foot{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:.74rem;color:var(--muted)}
+.chip{font:700 .68rem var(--body);padding:1px 6px;border-radius:4px;background:var(--idle-soft);color:var(--ink)}
 .note{font-size:.8rem;color:var(--muted)}
 .empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:22px 16px;text-align:center;color:var(--muted)}
 .sheet{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px}
@@ -117,7 +141,7 @@ footer{font-size:.76rem;color:var(--muted)}
   </div>
   <section id="sheetHost"></section>
   <main class="cards" id="cards"></main>
-  <footer>Scores and DraftKings lines come from ESPN's public scoreboard and update every 20 to 60 seconds. Spread and total results are measured against the line you saved, not the current line. Tracking tool, not betting advice.</footer>
+  <footer>Scores and DraftKings lines come from ESPN's public scoreboard and refresh every 5 seconds while a pick is live. Spreads are judged on the current score against the line you saved. Totals are judged on the scoring pace for the full game against your line, and finished games use the final score. Tracking tool, not betting advice.</footer>
 </div>
 
 <script>
@@ -133,7 +157,7 @@ const etDate = d => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_Yo
 function parseTeam(c) {
   const t = c.team || {};
   return { id: String(t.id), score: num(c.score), name: t.shortDisplayName || t.location || t.displayName || t.abbreviation,
-    abbr: t.abbreviation || "", srcs: [t.location, t.shortDisplayName].filter(Boolean), rawAliases: [t.location, t.shortDisplayName, t.displayName, t.name, t.abbreviation].map(norm).filter(a => a.length >= 3) };
+    abbr: t.abbreviation || "", logo: String(t.logo || (t.logos && t.logos[0] && t.logos[0].href) || "").replace(/^http:/, "https:"), mascot: t.name || "", rank: (c.curatedRank && c.curatedRank.current > 0 && c.curatedRank.current <= 25) ? c.curatedRank.current : 0, srcs: [t.location, t.shortDisplayName].filter(Boolean), rawAliases: [t.location, t.shortDisplayName, t.displayName, t.name, t.abbreviation].map(norm).filter(a => a.length >= 3) };
 }
 function parseEvent(ev) {
   const comp = (ev.competitions || [])[0] || {};
@@ -191,7 +215,14 @@ function parseLine(raw, events) {
 function elapsedMin(e) {
   if (e.state === "post") return 40;
   if (e.state !== "in") return 0;
+  if (e.statusName === "STATUS_HALFTIME") return 20;
   return e.period <= 2 ? (e.period - 1) * 20 + (1200 - e.clock) / 60 : 40 + (e.period - 3) * 5 + (300 - e.clock) / 60;
+}
+// Projected final total from the scoring rate so far (needs 3+ minutes played).
+function paceOf(e, tot) {
+  const m = elapsedMin(e);
+  if (e.state !== "in" || m < 3) return null;
+  return tot / m * (e.period <= 2 ? 40 : 40 + 5 * (e.period - 2));
 }
 function grade(p, e) {
   if (!e) return { kind: "missing" };
@@ -204,9 +235,12 @@ function grade(p, e) {
     const t = p.teamId === e.away.id ? e.away : e.home, o = t === e.away ? e.home : e.away;
     cover = t.score + p.line - o.score;
   }
-  const result = cover > 0 ? "win" : cover < 0 ? "lose" : "push";
-  let pace = null;
-  if (p.mkt === "T" && e.state === "in" && e.period <= 2) { const m = elapsedMin(e); if (m >= 4) pace = Math.round(tot / m * 40); }
+  let result = cover > 0 ? "win" : cover < 0 ? "lose" : "push", pace = null;
+  if (p.mkt === "T" && e.state === "in") {
+    pace = paceOf(e, tot);
+    if (pace == null) result = "early";
+    else { cover = p.dir === "over" ? pace - p.line : p.line - pace; result = Math.abs(cover) < 0.5 ? "push" : cover > 0 ? "win" : "lose"; }
+  }
   return { kind: e.state === "post" ? "final" : "live", result, cover, tot, pace };
 }
 // ---- Parser for the VSiN "CBB Leans" page text (copy the page, paste here) ----
@@ -258,9 +292,11 @@ function parseVSiN(text, events) {
     const tm = lines[i].match(TIPRE); if (!tm) continue;
     let rest = tm[2], k = i + 1;
     if (!rest) { rest = lines[k] || ""; k++; }
-    const mm = rest.match(/^(total|side)\s*(.+)$/i); if (!mm) continue;
+    const mm = rest.match(/^(total|side)\s*(.*)$/i); if (!mm) continue;
+    let body = mm[2].trim();
+    if (!body) { body = lines[k] || ""; k++; }
     found++;
-    const tip = tm[1], isTotal = /^total$/i.test(mm[1]), body = mm[2].trim();
+    const tip = tm[1], isTotal = /^total$/i.test(mm[1]);
     const gl = lines[k] || ""; k++;
     let prof = ""; const why = [];
     const pm = (lines[k] || "").match(/^(C\+|E|W)(?:\s+(.*))?$/);
@@ -273,7 +309,7 @@ function parseVSiN(text, events) {
     const aw = gm[1].trim(), ho = gm[2].trim(), tipMin = tipMinutes(tip);
     const e = bestGame(aw, ho, events, tipMin);
     if (!e) { results.push({ raw: aw + " @ " + ho + " (" + tip + ")", error: "No matching ESPN game on this date" }); continue; }
-    const base = { eventId: e.id, date: e.date, game: e.away.name + " @ " + e.home.name, raw, tip, prof, why: why.join("; "), src: "vsin" };
+    const base = { eventId: e.id, date: e.date, game: e.away.name + " @ " + e.home.name, raw, tip, prof, why: why.join("; "), src: "vsin", net: (gm[3] || "").trim() };
     if (isTotal) {
       const t = body.match(/^(over|under)\s*(\d+(?:\.\d+)?)/i);
       if (!t) { results.push({ raw, error: "Could not read the total" }); continue; }
@@ -318,9 +354,9 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
     } finally { clearTimeout(to); }
   }
   function neededDates() { const s = new Set(S.picks.map(p => p.date)); s.add(today()); if (S.sheet) s.add(S.viewDate); return [...s]; }
-  async function refresh() {
+  async function refresh(manual) {
     if (S.loading) return;
-    S.loading = true; $("refreshBtn").disabled = true;
+    S.loading = true; if (manual === true) $("refreshBtn").disabled = true;
     try { await Promise.all(neededDates().map(fetchDate)); S.lastOk = new Date(); S.err = null; }
     catch (e) { S.err = e && e.name === "AbortError" ? "ESPN timed out" : (e && e.message) || "Network error"; }
     S.loading = false; $("refreshBtn").disabled = false;
@@ -331,51 +367,81 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
   function schedule() {
     clearTimeout(S.timer);
     if (document.hidden) return;
-    S.timer = setTimeout(refresh, anyLive() ? 20000 : soon() ? 30000 : 60000);
+    S.timer = setTimeout(refresh, anyLive() ? 5000 : soon() ? 15000 : 60000);
   }
+  document.addEventListener("load", ev => { const i = ev.target; if (i && i.tagName === "IMG" && i.parentNode && i.parentNode.classList.contains("logo")) i.parentNode.classList.add("ok"); }, true);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); else clearTimeout(S.timer); });
 
+  const periodLabel = e => e.period <= 0 ? "" : e.period === 1 ? "1st half" : e.period === 2 ? "2nd half" : e.period === 3 ? "OT" : (e.period - 2) + "OT";
+  function clockParts(e) {
+    if (e.state === "pre") return { main: tm(e.start), sub: "Tip-off", cls: "" };
+    if (e.state === "post") return { main: "FINAL", sub: e.period > 2 ? (e.period === 3 ? "OT" : (e.period - 2) + "OT") : "", cls: "fin" };
+    if (e.statusName === "STATUS_HALFTIME") return { main: "HALF", sub: "Halftime", cls: "live" };
+    if (e.statusName === "STATUS_END_PERIOD") return { main: "END", sub: periodLabel(e), cls: "live" };
+    if (/DELAYED|SUSPENDED/.test(e.statusName)) return { main: "DELAY", sub: periodLabel(e), cls: "live" };
+    return { main: e.displayClock || "0:00", sub: periodLabel(e), cls: "live" };
+  }
+  const logoHTML = t => '<span class="logo"><b>' + esc((t.abbr || t.name || "").slice(0, 4)) + "</b>" + (t.logo ? '<img src="' + esc(t.logo) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">' : "") + "</span>";
+  function boardHTML(p, e, g) {
+    const c = clockParts(e), started = e.state !== "pre", tied = e.away.score === e.home.score;
+    const rows = [e.away, e.home].map(t => {
+      const other = t === e.away ? e.home : e.away, mine = p.mkt === "S" && t.id === p.teamId;
+      const rk = t.rank ? '<span class="rk">' + t.rank + "</span>" : "";
+      return '<div class="trow">' + logoHTML(t) + '<div class="tmw"><div class="tn">' + rk + esc(t.name) + '</div><div class="mas">' + esc(t.mascot) + (mine ? '<span class="pk">Pick ' + signed(p.line) + "</span>" : "") + '</div></div><div class="sc' + (started && !tied && t.score < other.score ? " dim" : "") + '">' + (started ? t.score : "–") + "</div></div>";
+    }).join("");
+    let btm = "";
+    if (p.mkt === "T") {
+      btm = '<div class="btm"><span>Total<b>' + (started ? g.tot : "–") + "</b></span><span>" + (p.dir === "over" ? "Over" : "Under") + "<b>" + fmt(p.line) + "</b></span>" + (g.pace != null ? "<span>Pace<b>" + Math.round(g.pace) + "</b></span>" : "") + "</div>";
+    }
+    return '<div class="board"><div class="btop ' + c.cls + '"><span class="cl-sub">' + (c.cls === "live" ? '<i class="livedot"></i>' : "") + esc(c.sub) + '</span><span class="cl-main">' + esc(c.main) + "</span></div>" + rows + btm + "</div>";
+  }
   function cardHTML(p) {
     const e = S.events.get(p.eventId), g = grade(p, e);
     const pickText = p.mkt === "T" ? (p.dir === "over" ? "Over " : "Under ") + fmt(p.line) : p.teamName + " " + signed(p.line);
-    const game = e ? e.away.name + " @ " + e.home.name : p.game;
-    let cls = "idle", verdict = "PENDING", delta = "", scoreRow = "";
-    if (g.kind === "missing") { verdict = "NO DATA"; delta = "Game not on ESPN's scoreboard for " + p.date.slice(4,6) + "/" + p.date.slice(6) + " yet."; }
+    let cls = "idle", verdict = "PENDING", delta = "";
+    if (g.kind === "missing") { verdict = "NO DATA"; delta = "Game not on ESPN's scoreboard for " + p.date.slice(4, 6) + "/" + p.date.slice(6) + " yet."; }
     else if (g.kind === "void") { verdict = "NO ACTION"; delta = e.detail || "Postponed or canceled."; }
     else if (g.kind === "pending") { verdict = "NOT STARTED"; delta = "Tips " + tm(e.start); }
     else {
       const fin = g.kind === "final";
-      cls = g.result;
-      verdict = fin ? (g.result === "win" ? "WON" : g.result === "lose" ? "LOST" : "PUSH") : (g.result === "win" ? "WINNING" : g.result === "lose" ? "LOSING" : "ON THE NUMBER");
-      if (g.result === "push") delta = fin ? "Final, graded as a push" : "Exactly on the line";
-      else if (p.mkt === "T") delta = (fin ? "Final total " : "Total ") + g.tot + ", " + fmt(g.cover) + (g.cover > 0 ? " on the right side of " : " on the wrong side of ") + fmt(p.line) + (g.pace ? ". On pace for " + g.pace : "");
+      cls = g.result === "early" ? "idle" : g.result;
+      verdict = fin ? (g.result === "win" ? "WON" : g.result === "lose" ? "LOST" : "PUSH")
+        : g.result === "early" ? "TOO EARLY" : (g.result === "win" ? "WINNING" : g.result === "lose" ? "LOSING" : "ON THE NUMBER");
+      if (p.mkt === "T" && !fin) {
+        if (g.result === "early") delta = "Pace shows after 3 minutes of play. Total so far " + g.tot + ".";
+        else delta = "Pace " + Math.round(g.pace) + " vs " + fmt(p.line) + " (" + (g.pace - p.line >= 0 ? "+" : "−") + fmt(g.pace - p.line) + "), total now " + g.tot;
+      } else if (g.result === "push") delta = fin ? "Final, graded as a push" : "Exactly on the line";
+      else if (p.mkt === "T") delta = "Final total " + g.tot + ", " + fmt(g.cover) + (g.cover > 0 ? " on the right side of " : " on the wrong side of ") + fmt(p.line);
       else delta = (g.cover > 0 ? (fin ? "Covered by " : "Covering by ") : (fin ? "Missed by " : "Behind by ")) + fmt(g.cover) + (fin ? "" : " vs your line");
-      if (g.result === "push" && p.mkt === "T" && g.pace) delta += ". On pace for " + g.pace;
     }
-    if (e && g.kind !== "missing" && g.kind !== "pending" && g.kind !== "void") {
-      const live = e.state === "in";
-      scoreRow = '<div class="score"><span class="t">' + esc(e.away.abbr || e.away.name) + " " + e.away.score + " – " + e.home.score + " " + esc(e.home.abbr || e.home.name) + '</span><span class="clock">' + esc(live ? e.detail : "Final") + "</span></div>";
-    }
+    const board = e && g.kind !== "missing" ? boardHTML(p, e, g) : '<div class="note">' + esc(p.game) + "</div>";
+    const bits = [];
+    if (p.prof) bits.push('<span class="chip">' + esc(p.prof) + "</span>");
+    if (p.why) bits.push("<span>" + esc(p.why) + "</span>");
+    if (p.tip) bits.push("<span>Tip " + esc(p.tip) + " ET</span>");
+    if (p.net) bits.push("<span>" + esc(p.net) + "</span>");
     const armed = S.armed === p.id;
     return '<article class="card ' + cls + '"><div class="top"><div class="pickline"><span class="mk">' + (p.mkt === "T" ? "Total" : "Side") + "</span>" + esc(pickText) +
-      '<div class="note">' + esc(game) + (p.prof ? " · " + esc(p.prof) + (p.why ? ": " + esc(p.why) : "") : "") + '</div></div><button class="x' + (armed ? " armed" : "") + '" data-rm="' + esc(p.id) + '" type="button">' + (armed ? "Remove?" : "Remove") + "</button></div>" +
-      '<div class="verdict-row"><span class="verdict">' + verdict + '</span><span class="delta">' + esc(delta) + "</span></div>" + scoreRow + "</article>";
+      '</div><button class="x' + (armed ? " armed" : "") + '" data-rm="' + esc(p.id) + '" type="button">' + (armed ? "Remove?" : "Remove") + "</button></div>" + board +
+      '<div class="verdict-row"><span class="verdict">' + verdict + '</span><span class="delta">' + esc(delta) + "</span></div>" +
+      (bits.length ? '<div class="foot">' + bits.join("") + "</div>" : "") + "</article>";
   }
   function rank(p) { const e = S.events.get(p.eventId); return !e ? 3 : e.state === "in" ? 0 : e.state === "pre" ? 1 : 2; }
 
+  function setCards(h) { if (h !== S.lastCards) { S.lastCards = h; $("cards").innerHTML = h; } }
   function renderCards() {
     const picks = [...S.picks].sort((a, b) => rank(a) - rank(b) || String((S.events.get(a.eventId) || {}).start).localeCompare(String((S.events.get(b.eventId) || {}).start)));
-    if (!picks.length) { $("cards").innerHTML = '<div class="empty">No leans yet. Tap Add leans, paste the picks from your lean tables or choose games from today’s slate.</div>'; return; }
+    if (!picks.length) { setCards('<div class="empty">No leans yet. Tap Add leans, paste the picks from your lean tables or choose games from today’s slate.</div>'); return; }
     const names = ["Live", "Upcoming", "Final", "Unmatched"];
     let html = "", last = -1;
     for (const p of picks) { const r = rank(p); if (r !== last) { html += '<div class="group-h">' + names[r] + "</div>"; last = r; } html += cardHTML(p); }
-    $("cards").innerHTML = html;
+    setCards(html);
   }
   function renderStrip() {
     let w = 0, l = 0, pend = 0, fin = [0, 0, 0];
     for (const p of S.picks) {
       const g = grade(p, S.events.get(p.eventId));
-      if (g.kind === "live") { if (g.result === "win") w++; else if (g.result === "lose") l++; }
+      if (g.kind === "live") { if (g.result === "win") w++; else if (g.result === "lose") l++; else pend++; }
       else if (g.kind === "final") { fin[g.result === "win" ? 0 : g.result === "lose" ? 1 : 2]++; }
       else pend++;
     }
@@ -409,11 +475,16 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
     return '<div class="sheet">' + tabs + chips + '<input type="search" id="gq" placeholder="Filter by team" value="' + esc(S.q || "") + '" aria-label="Filter by team"><div class="glist">' + (items || '<div class="empty">' + (S.byDate[S.viewDate] ? "No games found." : "Loading games…") + "</div>") + '</div><div class="hint">Lines are prefilled from DraftKings via ESPN. Change them to match the lean you were given.</div><div class="bar"><button class="btn ghost" id="closeSheet" type="button">Close</button></div></div>';
   }
   function renderSheet() {
-    if (!S.sheet) { $("sheetHost").innerHTML = ""; return; }
+    if (!S.sheet) { $("sheetHost").innerHTML = ""; S.lastSheet = null; return; }
+    const html = sheetHTML();
+    if (html === S.lastSheet && $("sheetHost").firstChild) return;
+    S.lastSheet = html;
     const keep = $("paste") ? $("paste").value : "";
+    const gl = $("sheetHost").querySelector(".glist"), st = gl ? gl.scrollTop : 0;
     const hadFocus = document.activeElement && document.activeElement.id === "gq";
-    $("sheetHost").innerHTML = sheetHTML();
+    $("sheetHost").innerHTML = html;
     if ($("paste")) $("paste").value = keep;
+    const gl2 = $("sheetHost").querySelector(".glist"); if (gl2) gl2.scrollTop = st;
     if (hadFocus && $("gq")) { const g = $("gq"); g.focus(); g.setSelectionRange(g.value.length, g.value.length); }
   }
   function render() { renderStrip(); renderCards(); renderSync(); if (S.sheet && !(document.activeElement && /^(sp|tt|gq|paste)$/.test(document.activeElement.id))) renderSheet(); }
@@ -426,7 +497,7 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
     const t = ev.target.closest("button"); if (!t) return;
     if (t.id === "addBtn") { S.sheet = true; S.viewDate = today(); renderSheet(); refresh(); return; }
     if (t.id === "closeSheet") { S.sheet = false; renderSheet(); return; }
-    if (t.id === "refreshBtn") { refresh(); return; }
+    if (t.id === "refreshBtn") { refresh(true); return; }
     if (t.id === "clearAll") {
       if (S.armClear) { S.picks = []; S.armClear = false; save(); t.textContent = "Clear all"; render(); }
       else { S.armClear = true; t.textContent = "Tap again to clear all"; setTimeout(() => { S.armClear = false; t.textContent = "Clear all"; }, 4000); }

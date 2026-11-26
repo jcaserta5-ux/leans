@@ -283,9 +283,12 @@ const PHRASES = [[/\bva commonwealth\b/g, "vcu"], [/\bbrigham young\b/g, "byu"],
   [/\bark pine bluff\b/g, "arkansas pine bluff"], [/^connecticut$/g, "uconn"], [/\bflorida (intl|international)\b/g, "fiu"], [/\babilene chr\b/g, "abilene christian"],
   [/\b(sc|usc|south carolina) upstate\b/g, "sc upstate"], [/\b(unc|north carolina) (wilmington|asheville|greensboro)\b/g, "unc $2"], [/\bst thomas (mn|minnesota)\b/g, "st thomas mn"],
   [/\b(umkc|kansas city)\b/g, "kansas city"], [/\bsaint (louis|josephs|marys)\b/g, "st $1"],
-  [/\b(lsu n orleans|new orleans)\b/g, "new orleans"], [/\b(jax|jacksonville) (st|state)\b/g, "jacksonville state"], [/\b(app|appalachian) (st|state)\b/g, "appalachian state"]];
+  [/\b(lsu n orleans|new orleans)\b/g, "new orleans"], [/\b(jax|jacksonville) (st|state)\b/g, "jacksonville state"], [/\b(app|appalachian) (st|state)\b/g, "appalachian state"],
+  [/\b(c|central) florida\b/g, "ucf"], [/\btexas san antonio\b/g, "utsa"], [/\btexas arlington\b/g, "ut arlington"], [/\btexas (rio grande valley|pan american)\b/g, "utrgv"], [/\b(tennessee|tenn) martin\b/g, "ut martin"],
+  [/\bfla atlantic\b/g, "florida atlantic"], [/\bloyola (chi|chicago|il)\b/g, "loyola chicago"], [/\b(la|louisiana) monroe\b/g, "ul monroe"], [/\b(miss|mississippi) st\b/g, "mississippi state"],
+  [/\bsam houston( st| state)?\b/g, "sam houston"], [/\bg(a|eorgia) southern\b/g, "georgia southern"], [/\bmass(achusetts)? lowell\b/g, "umass lowell"]];
 const ALTS = { e: ["eastern", "east"], n: ["northern", "north"], s: ["southern", "south"], w: ["western", "west"], se: ["southeastern"], ne: ["northeastern"], st: ["state", "saint"], state: ["st"],
-  intl: ["international"], mn: ["minnesota"], fl: ["florida"], ga: ["georgia"], ark: ["arkansas"], miss: ["mississippi"], albany: ["ualbany"], ualbany: ["albany"], citadel: ["the"] };
+  intl: ["international"], mn: ["minnesota"], fl: ["florida"], ga: ["georgia"], ark: ["arkansas"], miss: ["mississippi"], albany: ["ualbany"], ualbany: ["albany"], citadel: ["the"], c: ["central"] };
 const toks = s => { let t = norm(s).replace(/[()]/g, " ").replace(/-/g, " ").replace(/\s+/g, " ").trim(); for (const [re, r] of PHRASES) t = t.replace(re, r); return t.split(" ").filter(Boolean); };
 function tokMatch(vt, tt) {
   if (!vt.length || !tt.length) return 0;

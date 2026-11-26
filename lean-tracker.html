@@ -81,6 +81,11 @@ h1.brand{line-height:0}
 .card.win .verdict{background:var(--win-soft);color:var(--win)}
 .card.lose .verdict{background:var(--lose-soft);color:var(--lose)}
 .card.push .verdict{background:var(--push-soft);color:var(--push)}
+.play.win .verdict{background:var(--win-soft);color:var(--win)}
+.play.lose .verdict{background:var(--lose-soft);color:var(--lose)}
+.play.push .verdict{background:var(--push-soft);color:var(--push)}
+.gtitle{font-weight:600;font-size:1.05rem;color:var(--ink)}
+.play{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
 .delta{font-size:.88rem;color:var(--muted)}
 .board{background:var(--board);color:var(--board-ink);border-radius:10px;overflow:hidden}
 .btop{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 12px;background:var(--board-2);border-bottom:1px solid var(--board-line)}
@@ -161,7 +166,7 @@ footer{font-size:.76rem;color:var(--muted)}
   </div>
   <section id="sheetHost"></section>
   <main class="cards" id="cards"></main>
-  <footer>Scores and DraftKings lines come from ESPN's public scoreboard and refresh every 2 seconds while a pick is live. Spreads are judged on the current score against the line you saved. Totals are judged on Quant Pace, a projection built from how scoring actually unfolds in 1420 finished Division I games (11/01 to 11/25), including the late surge in close games. Straightline Pace is shown for comparison. Overtime uses the average scoring rate. Finished games use the final score. Tracking tool, not betting advice. Version Nov 26 e.</footer>
+  <footer>Scores and DraftKings lines come from ESPN's public scoreboard and refresh every 2 seconds while a pick is live. Spreads are judged on the current score against the line you saved. Totals are judged on Quant Pace, a projection built from how scoring actually unfolds in 1420 finished Division I games (11/01 to 11/25), including the late surge in close games. Straightline Pace is shown for comparison. Overtime uses the average scoring rate. Finished games use the final score. Tracking tool, not betting advice. Version Nov 26 f.</footer>
 </div>
 
 <script>
@@ -449,7 +454,7 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
   const logoHTML = t => '<span class="logo"><b>' + esc((t.abbr || t.name || "").slice(0, 4)) + "</b>" + (t.logo ? '<img src="' + esc(t.logo) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">' : "") + "</span>";
   const WORD = { win: "WINNING", lose: "LOSING", push: "PUSH", early: "EARLY", nobet: "NO BET" };
   const pbox = (label, v, res, main) => '<span class="pbx ' + (res || "early") + (main ? " main" : "") + '">' + label + "<b>" + f1(v) + "</b><em>" + (WORD[res] || "") + "</em></span>";
-  function boardHTML(p, e, g) {
+  function boardHTML(picks, e, gs) {
     const c = clockParts(e), started = e.state !== "pre", tied = e.away.score === e.home.score;
     const hasLS = started && [e.away, e.home].every(t => t.ls && t.ls.length > 0);
     const hasOT = hasLS && (e.period > 2 || e.away.ls.length > 2 || e.home.ls.length > 2);
@@ -461,23 +466,23 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
     };
     const lhead = hasLS ? '<div class="trow lhead"><span></span><span></span><div class="ls"><span class="lc">1H</span><span class="lc">2H</span>' + (hasOT ? '<span class="lc">OT</span>' : "") + "</div><span></span></div>" : "";
     const rows = [e.away, e.home].map(t => {
-      const other = t === e.away ? e.home : e.away, mine = p.mkt === "S" && t.id === p.teamId;
+      const other = t === e.away ? e.home : e.away, sp = picks.find(q => q.mkt === "S" && q.teamId === t.id), mine = !!sp;
       const rk = t.rank ? '<span class="rk">' + t.rank + "</span>" : "";
-      return '<div class="trow">' + logoHTML(t) + '<div class="tmw"><div class="tn">' + rk + esc(t.name) + '</div><div class="mas">' + esc(t.mascot) + (mine ? '<span class="pk">Pick ' + signed(p.line) + "</span>" : "") + "</div></div>" + lsCells(t) + '<div class="sc' + (started && !tied && t.score < other.score ? " dim" : "") + '">' + (started ? t.score : "–") + "</div></div>";
+      return '<div class="trow">' + logoHTML(t) + '<div class="tmw"><div class="tn">' + rk + esc(t.name) + '</div><div class="mas">' + esc(t.mascot) + (mine ? '<span class="pk">Pick ' + signed(sp.line) + "</span>" : "") + "</div></div>" + lsCells(t) + '<div class="sc' + (started && !tied && t.score < other.score ? " dim" : "") + '">' + (started ? t.score : "–") + "</div></div>";
     }).join("");
-    let btm = "";
-    if (p.mkt === "S" && g.kind === "live" && (g.quant != null || g.pace != null)) {
-      btm = '<div class="btm"><span>Total<b>' + g.tot + "</b></span>" + (g.quant != null ? pbox("Quant pace", g.quant, "nobet", true) : "") + (g.pace != null ? pbox("Straight pace", g.pace, "nobet", false) : "") + "</div>";
-    }
-    if (p.mkt === "T") {
+    let btm = ""; const ti = picks.findIndex(q => q.mkt === "T");
+    if (ti >= 0) {
+      const p = picks[ti], g = gs[ti];
       btm = '<div class="btm"><span>Total<b>' + (started ? g.tot : "–") + "</b></span><span>" + (p.dir === "over" ? "Over" : "Under") + "<b>" + fmt(p.line) + "</b></span>" +
         (g.quant != null ? pbox("Quant pace", g.quant, g.result, true) : "") + (g.pace != null ? pbox("Straight pace", g.pace, g.spResult, false) : "") + "</div>";
+    } else {
+      const g = gs.find(x => x.kind === "live" && (x.quant != null || x.pace != null));
+      if (g) btm = '<div class="btm"><span>Total<b>' + g.tot + "</b></span>" + (g.quant != null ? pbox("Quant pace", g.quant, "nobet", true) : "") + (g.pace != null ? pbox("Straight pace", g.pace, "nobet", false) : "") + "</div>";
     }
     return '<div class="board"><div class="btop ' + c.cls + '"><span class="cl-sub">' + (c.cls === "live" ? '<i class="livedot"></i>' : "") + esc(c.sub) + '</span><span class="cl-main"' + (c.tick ? ' data-ev="' + esc(e.id) + '"' : "") + ">" + esc(c.main) + "</span></div>" + lhead + rows + btm + "</div>";
   }
-  function cardHTML(p) {
-    const e = S.events.get(p.eventId), g = grade(p, e);
-    const pickText = p.mkt === "T" ? (p.dir === "over" ? "Over " : "Under ") + fmt(p.line) : p.teamName + " " + signed(p.line);
+  // One play's status: colour class, verdict word and the explanatory line.
+  function playInfo(p, e, g) {
     let cls = "idle", verdict = "PENDING", delta = "";
     if (g.kind === "missing") { verdict = "NO DATA"; delta = "Game not on ESPN's scoreboard for " + p.date.slice(4, 6) + "/" + p.date.slice(6) + " yet."; }
     else if (g.kind === "void") { verdict = "NO ACTION"; delta = e.detail || "Postponed or canceled."; }
@@ -494,17 +499,30 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
       else if (p.mkt === "T") delta = "Final total " + g.tot + ", " + fmt(g.cover) + (g.cover > 0 ? " on the right side of " : " on the wrong side of ") + fmt(p.line);
       else delta = (g.cover > 0 ? (fin ? "Covered by " : "Covering by ") : (fin ? "Missed by " : "Behind by ")) + fmt(g.cover) + (fin ? "" : " vs your line");
     }
-    const board = e && g.kind !== "missing" ? boardHTML(p, e, g) : '<div class="note">' + esc(p.game) + "</div>";
+    return { cls, verdict, delta, liveTotal: p.mkt === "T" && g.kind === "live" };
+  }
+  const pickLabel = p => p.mkt === "T" ? (p.dir === "over" ? "Over " : "Under ") + fmt(p.line) : p.teamName + " " + signed(p.line);
+  const footHTML = p => {
     const bits = [];
     if (p.prof) bits.push('<span class="chip">' + esc(p.prof) + "</span>");
     if (p.why) bits.push("<span>" + esc(p.why) + "</span>");
     if (p.tip) bits.push("<span>Tip " + esc(p.tip) + " ET</span>");
     if (p.net) bits.push("<span>" + esc(p.net) + "</span>");
-    const armed = S.armed === p.id, liveTotal = p.mkt === "T" && g.kind === "live";
-    return '<article class="card ' + cls + '"><div class="top"><div class="pickline"><span class="mk">' + (p.mkt === "T" ? "Total" : "Side") + "</span>" + esc(pickText) +
-      '</div><button class="x' + (armed ? " armed" : "") + '" data-rm="' + esc(p.id) + '" type="button">' + (armed ? "Remove?" : "Remove") + "</button></div>" + board +
-      (liveTotal ? '<div class="delta">' + esc(delta) + "</div>" : '<div class="verdict-row"><span class="verdict">' + verdict + '</span><span class="delta">' + esc(delta) + "</span></div>") +
-      (bits.length ? '<div class="foot">' + bits.join("") + "</div>" : "") + "</article>";
+    return bits.length ? '<div class="foot">' + bits.join("") + "</div>" : "";
+  };
+  const rmBtn = p => { const armed = S.armed === p.id; return '<button class="x' + (armed ? " armed" : "") + '" data-rm="' + esc(p.id) + '" type="button">' + (armed ? "Remove?" : "Remove") + "</button>"; };
+  const verdictHTML = i => i.liveTotal ? '<div class="delta">' + esc(i.delta) + "</div>" : '<div class="verdict-row"><span class="verdict">' + i.verdict + '</span><span class="delta">' + esc(i.delta) + "</span></div>";
+  // A game can carry several plays (for example a side and a total): one scoreboard, one block per play.
+  function cardHTML(group) {
+    const e = S.events.get(group[0].eventId), gs = group.map(p => grade(p, e)), infos = group.map((p, i) => playInfo(p, e, gs[i]));
+    const g0 = gs[0], showBoard = e && g0.kind !== "missing";
+    if (group.length === 1) {
+      const p = group[0], i = infos[0], board = showBoard ? boardHTML(group, e, gs) : '<div class="note">' + esc(p.game) + "</div>";
+      return '<article class="card ' + i.cls + '"><div class="top"><div class="pickline"><span class="mk">' + (p.mkt === "T" ? "Total" : "Side") + "</span>" + esc(pickLabel(p)) + "</div>" + rmBtn(p) + "</div>" + board + verdictHTML(i) + footHTML(p) + "</article>";
+    }
+    const title = showBoard ? e.away.name + " @ " + e.home.name : group[0].game, board = showBoard ? boardHTML(group, e, gs) : "";
+    const plays = group.map((p, k) => '<div class="play ' + infos[k].cls + '"><div class="top"><div class="pickline"><span class="mk">' + (p.mkt === "T" ? "Total" : "Side") + "</span>" + esc(pickLabel(p)) + "</div>" + rmBtn(p) + "</div>" + verdictHTML(infos[k]) + footHTML(p) + "</div>").join("");
+    return '<article class="card multi"><div class="gtitle">' + esc(title) + "</div>" + board + plays + "</article>";
   }
   function rank(p) { const e = S.events.get(p.eventId); return !e ? 3 : e.state === "in" ? 0 : e.state === "pre" ? 1 : 2; }
 
@@ -514,7 +532,10 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
     if (!picks.length) { setCards('<div class="empty">No leans yet. Tap Add leans, paste the picks from your lean tables or choose games from today’s slate.</div>'); return; }
     const names = ["Live", "Upcoming", "Final", "Unmatched"];
     let html = "", last = -1;
-    for (const p of picks) { const r = rank(p); if (r !== last) { html += '<div class="group-h">' + names[r] + "</div>"; last = r; } html += cardHTML(p); }
+    const groups = [], idx = {};
+    for (const p of picks) { const k = p.eventId || p.id; if (idx[k] == null) { idx[k] = groups.length; groups.push([]); } groups[idx[k]].push(p); }
+    for (const g of groups) g.sort((a, b) => (a.mkt === "T") - (b.mkt === "T"));
+    for (const g of groups) { const r = rank(g[0]); if (r !== last) { html += '<div class="group-h">' + names[r] + "</div>"; last = r; } html += cardHTML(g); }
     setCards(html);
   }
   function renderStrip() {

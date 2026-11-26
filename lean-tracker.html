@@ -392,7 +392,13 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
       const evs = (j.events || []).map(parseEvent).filter(Boolean);
       buildAliases(evs);
       S.byDate[d] = evs.map(e => e.id);
-      for (const e of evs) S.events.set(e.id, e);
+      S.clk = S.clk || {};
+      for (const e of evs) {
+        const o = S.events.get(e.id);
+        // The clock counts down on screen only while ESPN's clock has been moving between updates (it stops on whistles and timeouts).
+        S.clk[e.id] = { sec: e.clock, at: Date.now(), run: !!(o && o.state === "in" && e.state === "in" && o.period === e.period && e.clock < o.clock), tenths: /\./.test(e.displayClock), disp: e.displayClock };
+        S.events.set(e.id, e);
+      }
       recordLines(evs);
     } finally { clearTimeout(to); }
   }
@@ -422,7 +428,7 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
     if (e.statusName === "STATUS_HALFTIME") return { main: "HALF", sub: "Halftime", cls: "live" };
     if (e.statusName === "STATUS_END_PERIOD") return { main: "END", sub: periodLabel(e), cls: "live" };
     if (/DELAYED|SUSPENDED/.test(e.statusName)) return { main: "DELAY", sub: periodLabel(e), cls: "live" };
-    return { main: e.displayClock || "0:00", sub: periodLabel(e), cls: "live" };
+    return { main: e.displayClock || "0:00", sub: periodLabel(e), cls: "live", tick: true };
   }
   const logoHTML = t => '<span class="logo"><b>' + esc((t.abbr || t.name || "").slice(0, 4)) + "</b>" + (t.logo ? '<img src="' + esc(t.logo) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">' : "") + "</span>";
   const WORD = { win: "WINNING", lose: "LOSING", push: "PUSH", early: "EARLY" };
@@ -448,7 +454,7 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
       btm = '<div class="btm"><span>Total<b>' + (started ? g.tot : "–") + "</b></span><span>" + (p.dir === "over" ? "Over" : "Under") + "<b>" + fmt(p.line) + "</b></span>" +
         (g.quant != null ? pbox("Quant pace", g.quant, g.result, true) : "") + (g.pace != null ? pbox("Straight pace", g.pace, g.spResult, false) : "") + "</div>";
     }
-    return '<div class="board"><div class="btop ' + c.cls + '"><span class="cl-sub">' + (c.cls === "live" ? '<i class="livedot"></i>' : "") + esc(c.sub) + '</span><span class="cl-main">' + esc(c.main) + "</span></div>" + lhead + rows + btm + "</div>";
+    return '<div class="board"><div class="btop ' + c.cls + '"><span class="cl-sub">' + (c.cls === "live" ? '<i class="livedot"></i>' : "") + esc(c.sub) + '</span><span class="cl-main"' + (c.tick ? ' data-ev="' + esc(e.id) + '"' : "") + ">" + esc(c.main) + "</span></div>" + lhead + rows + btm + "</div>";
   }
   function cardHTML(p) {
     const e = S.events.get(p.eventId), g = grade(p, e);
@@ -548,6 +554,15 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
     if (S.picks.some(x => x.eventId === p.eventId && x.mkt === p.mkt && x.line === p.line && x.teamId === p.teamId && x.dir === p.dir)) return false;
     S.picks.push({ id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ...p }); save(); return true;
   }
+  setInterval(() => {
+    const now = Date.now(), K = S.clk; if (!K) return;
+    document.querySelectorAll(".cl-main[data-ev]").forEach(el => {
+      const k = K[el.dataset.ev]; if (!k) return;
+      if (!k.run) { if (k.disp && el.textContent !== k.disp) el.textContent = k.disp; return; }
+      const s = Math.max(0, k.sec - (now - k.at) / 1000);
+      el.textContent = s >= 60 ? Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0") : k.tenths ? s.toFixed(1) : "0:" + String(Math.floor(s)).padStart(2, "0");
+    });
+  }, 100);
   document.addEventListener("click", async ev => {
     const t = ev.target.closest("button"); if (!t) return;
     if (t.id === "pasteBtn" || t.id === "clipBtn") {

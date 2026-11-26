@@ -113,6 +113,7 @@ footer{font-size:.76rem;color:var(--muted)}
     <button class="btn primary" id="addBtn" type="button">Add leans</button>
     <button class="btn" id="refreshBtn" type="button">Refresh</button>
     <button class="btn ghost" id="clearBtn" type="button">Clear finished</button>
+    <button class="btn ghost" id="clearAll" type="button">Clear all</button>
   </div>
   <section id="sheetHost"></section>
   <main class="cards" id="cards"></main>
@@ -213,7 +214,8 @@ const PHRASES = [[/\bva commonwealth\b/g, "vcu"], [/\bbrigham young\b/g, "byu"],
   [/\bsiu edwardsville\b/g, "siue"], [/\bnebraska omaha\b/g, "omaha"], [/\bmiss valley st\b/g, "mississippi valley state"], [/^mississippi$/g, "ole miss"],
   [/\bark pine bluff\b/g, "arkansas pine bluff"], [/^connecticut$/g, "uconn"], [/\bflorida (intl|international)\b/g, "fiu"], [/\babilene chr\b/g, "abilene christian"],
   [/\b(sc|usc|south carolina) upstate\b/g, "sc upstate"], [/\b(unc|north carolina) (wilmington|asheville|greensboro)\b/g, "unc $2"], [/\bst thomas (mn|minnesota)\b/g, "st thomas mn"],
-  [/\b(umkc|kansas city)\b/g, "kansas city"], [/\bsaint (louis|josephs|marys)\b/g, "st $1"]];
+  [/\b(umkc|kansas city)\b/g, "kansas city"], [/\bsaint (louis|josephs|marys)\b/g, "st $1"],
+  [/\b(lsu n orleans|new orleans)\b/g, "new orleans"], [/\b(jax|jacksonville) (st|state)\b/g, "jacksonville state"], [/\b(app|appalachian) (st|state)\b/g, "appalachian state"]];
 const ALTS = { e: ["eastern", "east"], n: ["northern", "north"], s: ["southern", "south"], w: ["western", "west"], se: ["southeastern"], ne: ["northeastern"], st: ["state", "saint"], state: ["st"],
   intl: ["international"], mn: ["minnesota"], fl: ["florida"], ga: ["georgia"], ark: ["arkansas"], miss: ["mississippi"], albany: ["ualbany"], ualbany: ["albany"], citadel: ["the"] };
 const toks = s => { let t = norm(s).replace(/[()]/g, " ").replace(/-/g, " ").replace(/\s+/g, " ").trim(); for (const [re, r] of PHRASES) t = t.replace(re, r); return t.split(" ").filter(Boolean); };
@@ -246,43 +248,56 @@ function bestGame(aw, ho, events, tip) {
   for (const e of events) { const s = gameScore(aw, ho, e, tip); if (s > bs) { bs = s; best = e; } }
   return bs >= 1.2 ? best : null;
 }
-const STOP = /^(no lean|from the|\d{1,2}:\d{2}\s*[AP]M(\s+window|\s+and later.*)?$)/i;
+const STOP = /^(no lean|from the|tip lean|profile key|\d{1,2}:\d{2}\s*[AP]M\b)/i;
+const TIPRE = /^(\d{1,2}:\d{2}\s*[AP]M)\b\s*(.*)$/i;
+// Handles both copy layouts: tip, pick, game, profile on separate lines, or "10:00 PM TotalOver 143.5" and "W Total dropped..." joined.
 function parseVSiN(text, events) {
-  const lines = String(text).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const lines = String(text).split(/\r?\n/).map(s => s.replace(/\s+/g, " ").trim()).filter(Boolean);
   const results = []; let found = 0;
-  for (let i = 0; i < lines.length - 1; i++) {
-    if (!/^\d{1,2}:\d{2}\s*[AP]M$/i.test(lines[i]) || !/^(TOTAL|SIDE)/i.test(lines[i + 1])) continue;
+  for (let i = 0; i < lines.length; i++) {
+    const tm = lines[i].match(TIPRE); if (!tm) continue;
+    let rest = tm[2], k = i + 1;
+    if (!rest) { rest = lines[k] || ""; k++; }
+    const mm = rest.match(/^(total|side)\s*(.+)$/i); if (!mm) continue;
     found++;
-    const tip = lines[i], pl = lines[i + 1], gl = lines[i + 2] || "", prof = lines[i + 3] || "", why = [];
-    for (let j = i + 4; j < lines.length && why.length < 3 && !STOP.test(lines[j]); j++) why.push(lines[j]);
-    const raw = tip + " " + pl + " " + gl;
+    const tip = tm[1], isTotal = /^total$/i.test(mm[1]), body = mm[2].trim();
+    const gl = lines[k] || ""; k++;
+    let prof = ""; const why = [];
+    const pm = (lines[k] || "").match(/^(C\+|E|W)(?:\s+(.*))?$/);
+    if (pm && !STOP.test(lines[k])) { prof = pm[1]; if (pm[2]) why.push(pm[2]); k++; }
+    for (; k < lines.length && why.length < 3 && !STOP.test(lines[k]); k++) why.push(lines[k]);
+    i = k - 1;
+    const raw = tip + " " + rest + " " + gl;
     const gm = gl.match(/^(.+?)\s+@\s+(.+?)(?:\s*\(([^)]*)\))?$/);
     if (!gm) { results.push({ raw, error: "Could not read the game line" }); continue; }
     const aw = gm[1].trim(), ho = gm[2].trim(), tipMin = tipMinutes(tip);
     const e = bestGame(aw, ho, events, tipMin);
     if (!e) { results.push({ raw: aw + " @ " + ho + " (" + tip + ")", error: "No matching ESPN game on this date" }); continue; }
     const base = { eventId: e.id, date: e.date, game: e.away.name + " @ " + e.home.name, raw, tip, prof, why: why.join("; "), src: "vsin" };
-    let m = pl.match(/^TOTAL\s*(over|under)\s*(\d+(?:\.\d+)?)/i);
-    if (m) { results.push({ pick: { ...base, mkt: "T", dir: m[1].toLowerCase(), line: num(m[2]) } }); continue; }
-    m = pl.match(/^SIDE\s*(.+?)\s*([+\-−]\s?\d+(?:\.\d+)?)\s*$/i);
-    if (!m) { results.push({ raw: pl, error: "Could not read the pick" }); continue; }
+    if (isTotal) {
+      const t = body.match(/^(over|under)\s*(\d+(?:\.\d+)?)/i);
+      if (!t) { results.push({ raw, error: "Could not read the total" }); continue; }
+      results.push({ pick: { ...base, mkt: "T", dir: t[1].toLowerCase(), line: num(t[2]) } }); continue;
+    }
+    const m = body.match(/^(.+?)\s*([+\-−]\s?\d+(?:\.\d+)?)\s*$/);
+    if (!m) { results.push({ raw, error: "Could not read the pick" }); continue; }
     const pickName = m[1].trim(), line = num(m[2].replace(/−/g, "-").replace(/\s/g, ""));
     const sim = n => { const a = toks(pickName), b = toks(n); return Math.max(tokMatch(a, b), tokMatch(b, a)); };
     const sa = Math.max(sim(aw), teamScore(pickName, e.away) * 0.99), sh = Math.max(sim(ho), teamScore(pickName, e.home) * 0.99);
-    if (Math.abs(sa - sh) < 0.01) { results.push({ raw: pl, error: "Could not tell which team the pick is on" }); continue; }
+    if (Math.abs(sa - sh) < 0.01) { results.push({ raw, error: "Could not tell which team the pick is on" }); continue; }
     const awayPick = sa > sh;
-    // The pick name is matched against the VSiN game line, then mapped to the ESPN team in the same slot.
     const flipped = teamScore(aw, e.home) > teamScore(aw, e.away);
     const t = (awayPick !== flipped) ? e.away : e.home;
     results.push({ pick: { ...base, mkt: "S", teamId: t.id, teamName: t.name, line } });
   }
   return { found, results };
 }
+const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Profile key)/i.test(s);
 //#core-end
 
 (function () {
   const $ = id => document.getElementById(id);
-  const KEY = "cbbLeans.v1";
+  const KEY = "cbbLeans.v2";
   const S = { picks: [], events: new Map(), byDate: {}, sheet: null, tab: "paste", viewDate: etDate(new Date()), open: null, armed: null, timer: null, lastOk: null, err: null, results: [], loading: false };
   const today = () => etDate(new Date());
   const addDays = (d, n) => { const t = new Date(Date.UTC(+d.slice(0,4), +d.slice(4,6) - 1, +d.slice(6,8), 12)); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0,10).replace(/-/g, ""); };
@@ -378,7 +393,7 @@ function parseVSiN(text, events) {
   function sheetHTML() {
     const tabs = '<div class="tabs"><button type="button" data-tab="paste" aria-pressed="' + (S.tab === "paste") + '">Paste leans</button><button type="button" data-tab="games" aria-pressed="' + (S.tab === "games") + '">Pick from games</button></div>';
     if (S.tab === "paste") {
-      const res = S.results.map(r => '<div class="' + (r.error ? "bad" : "") + '">' + esc(r.error ? r.raw + " — " + r.error : "Added: " + r.msg) + "</div>").join("");
+      const res = S.results.map(r => '<div class="' + (r.error ? "bad" : "") + '">' + esc(r.error ? (r.raw ? r.raw + " — " : "") + r.error : r.msg.indexOf(" leans matched") > 0 ? r.msg : "Added: " + r.msg) + "</div>").join("");
       return '<div class="sheet">' + tabs + chipsHTML() + '<label class="hint" for="paste">Paste the whole CBB Leans page text, or one lean per line, for example: Belmont -4.5, Over 144.5 Charlotte Northern Iowa, Rice +4.5. Lines are matched to games on the ESPN slate for the date shown above (today by default). Pasting the page adds only the leans, not the info-only notes.</label><textarea id="paste" placeholder="Belmont -4.5&#10;Over 144.5 Northern Iowa Charlotte"></textarea><div class="bar"><button class="btn primary" id="doPaste" type="button">Add to tracker</button><button class="btn ghost" id="closeSheet" type="button">Close</button></div><div class="res">' + res + "</div></div>";
     }
     const evs = (S.byDate[S.viewDate] || []).map(id => S.events.get(id)).filter(Boolean);
@@ -412,6 +427,11 @@ function parseVSiN(text, events) {
     if (t.id === "addBtn") { S.sheet = true; S.viewDate = today(); renderSheet(); refresh(); return; }
     if (t.id === "closeSheet") { S.sheet = false; renderSheet(); return; }
     if (t.id === "refreshBtn") { refresh(); return; }
+    if (t.id === "clearAll") {
+      if (S.armClear) { S.picks = []; S.armClear = false; save(); t.textContent = "Clear all"; render(); }
+      else { S.armClear = true; t.textContent = "Tap again to clear all"; setTimeout(() => { S.armClear = false; t.textContent = "Clear all"; }, 4000); }
+      return;
+    }
     if (t.id === "clearBtn") { S.picks = S.picks.filter(p => { const g = grade(p, S.events.get(p.eventId)); return g.kind !== "final" && g.kind !== "void"; }); save(); render(); return; }
     if (t.dataset.rm) { if (S.armed === t.dataset.rm) { S.picks = S.picks.filter(p => p.id !== t.dataset.rm); S.armed = null; save(); } else S.armed = t.dataset.rm; render(); return; }
     if (t.dataset.tab) { S.tab = t.dataset.tab; renderSheet(); return; }
@@ -432,6 +452,7 @@ function parseVSiN(text, events) {
         if (!vs.results.some(r => r.error)) $("paste").value = "";
         render(); renderSheet(); schedule(); return;
       }
+      if (looksLikePage($("paste").value)) { S.results = [{ raw: "", error: "That looks like the leans page, but no leans were found in it. Paste the full page text, including the tip times and picks." }]; renderSheet(); return; }
       S.results = lines.map(l => {
         const p = parseLine(l, evs); if (!p) return null;
         if (p.error) return { raw: l, error: p.error };

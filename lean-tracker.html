@@ -85,22 +85,28 @@ h1 span{color:var(--accent)}
 .btop.live .cl-sub{color:var(--board-ink)}
 .livedot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--board-hot);margin-right:6px;animation:pulse 1.6s ease-in-out infinite}
 @media (prefers-reduced-motion:reduce){.livedot{animation:none}}
-.trow{display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px 12px}
+.trow{display:grid;grid-template-columns:38px minmax(0,1fr) auto 62px;align-items:center;gap:8px;padding:8px 12px}
+.ls{display:flex}
+.lc{width:30px;text-align:right;font:600 1.05rem var(--display);color:var(--board-dim);font-variant-numeric:tabular-nums}
+.lhead{padding-top:5px;padding-bottom:0}
+.lhead+.trow{border-top:0!important}
+.lhead .lc{font:600 .64rem var(--body);letter-spacing:.08em}
 .trow+.trow{border-top:1px solid var(--board-line)}
 .logo{position:relative;width:38px;height:38px;border-radius:50%;background:#fff;display:grid;place-items:center;overflow:hidden}
 .logo b{font:700 .72rem var(--display);color:#3a4350;letter-spacing:.02em}
 .logo.ok b{visibility:hidden}
 .logo img{position:absolute;inset:3px;width:calc(100% - 6px);height:calc(100% - 6px);object-fit:contain}
 .tmw{min-width:0}
-.tn{font:700 1.25rem/1.05 var(--display);letter-spacing:.02em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tn{font:700 1.18rem/1.05 var(--display);letter-spacing:.02em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rk{color:var(--board-dim);font-size:.82rem;margin-right:5px}
 .mas{font-size:.72rem;color:var(--board-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pk{display:inline-block;font:700 .6rem var(--body);letter-spacing:.06em;background:var(--board-pick);color:#1b1500;border-radius:3px;padding:1px 5px;margin-left:6px;text-transform:uppercase}
-.sc{font:700 2.5rem/1 var(--display);font-variant-numeric:tabular-nums;min-width:2ch;text-align:right}
+.sc{font:700 2.5rem/1 var(--display);font-variant-numeric:tabular-nums;text-align:right}
 .sc.dim{color:var(--board-dim)}
 .btm{display:flex;justify-content:space-around;gap:8px;padding:7px 12px;background:var(--board-2);border-top:1px solid var(--board-line);font-size:.74rem;color:var(--board-dim);text-transform:uppercase;letter-spacing:.07em}
 .btm b{display:block;font:700 1.2rem/1.1 var(--display);color:var(--board-ink);letter-spacing:.02em;text-align:center}
 .btm span{text-align:center}
+.btm b.hl{color:var(--board-pick)}
 .foot{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:.74rem;color:var(--muted)}
 .chip{font:700 .68rem var(--body);padding:1px 6px;border-radius:4px;background:var(--idle-soft);color:var(--ink)}
 .note{font-size:.8rem;color:var(--muted)}
@@ -141,12 +147,13 @@ footer{font-size:.76rem;color:var(--muted)}
   </div>
   <section id="sheetHost"></section>
   <main class="cards" id="cards"></main>
-  <footer>Scores and DraftKings lines come from ESPN's public scoreboard and refresh every 5 seconds while a pick is live. Spreads are judged on the current score against the line you saved. Totals are judged on the scoring pace for the full game against your line, and finished games use the final score. Tracking tool, not betting advice.</footer>
+  <footer>Scores and DraftKings lines come from ESPN's public scoreboard and refresh every 5 seconds while a pick is live. Spreads are judged on the current score against the line you saved. Totals are judged on Quant Pace, a projection built from how scoring actually unfolds in 1420 finished Division I games (11/01 to 11/25), including the late surge in close games. Straightline Pace is shown for comparison. Overtime uses the average scoring rate. Finished games use the final score. Tracking tool, not betting advice.</footer>
 </div>
 
 <script>
 //#core-start
 const ESPN = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard";
+const f1 = n => (Math.round(n * 10) / 10).toFixed(1);
 const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const fmt = n => { const a = Math.abs(n); return Number.isInteger(a) ? String(a) : String(Math.round(a * 10) / 10); };
 const signed = n => (n > 0 ? "+" : n < 0 ? "−" : "") + (n === 0 ? "PK" : fmt(n));
@@ -157,7 +164,7 @@ const etDate = d => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_Yo
 function parseTeam(c) {
   const t = c.team || {};
   return { id: String(t.id), score: num(c.score), name: t.shortDisplayName || t.location || t.displayName || t.abbreviation,
-    abbr: t.abbreviation || "", logo: String(t.logo || (t.logos && t.logos[0] && t.logos[0].href) || "").replace(/^http:/, "https:"), mascot: t.name || "", rank: (c.curatedRank && c.curatedRank.current > 0 && c.curatedRank.current <= 25) ? c.curatedRank.current : 0, srcs: [t.location, t.shortDisplayName].filter(Boolean), rawAliases: [t.location, t.shortDisplayName, t.displayName, t.name, t.abbreviation].map(norm).filter(a => a.length >= 3) };
+    abbr: t.abbreviation || "", ls: (c.linescores || []).map(x => num(x && x.value != null ? x.value : x && x.displayValue)), logo: String(t.logo || (t.logos && t.logos[0] && t.logos[0].href) || "").replace(/^http:/, "https:"), mascot: t.name || "", rank: (c.curatedRank && c.curatedRank.current > 0 && c.curatedRank.current <= 25) ? c.curatedRank.current : 0, srcs: [t.location, t.shortDisplayName].filter(Boolean), rawAliases: [t.location, t.shortDisplayName, t.displayName, t.name, t.abbreviation].map(norm).filter(a => a.length >= 3) };
 }
 function parseEvent(ev) {
   const comp = (ev.competitions || [])[0] || {};
@@ -224,6 +231,19 @@ function paceOf(e, tot) {
   if (e.state !== "in" || m < 3) return null;
   return tot / m * (e.period <= 2 ? 40 : 40 + 5 * (e.period - 2));
 }
+const QCAL = {"games":1420,"range":"Games from 11/01 to 11/25","params":{"bf":60,"k":120,"a":0.75},"avgFinal":150.19,"cum":[0,1.14,2.73,4.41,6.16,7.9,9.77,11.53,13.38,15.16,16.88,18.52,20.25,21.99,23.67,25.41,27.21,29.01,30.77,32.49,34.3,36.09,37.94,39.8,41.66,43.42,45.16,46.96,48.79,50.7,52.64,54.47,56.37,58.23,60.06,61.93,63.82,65.73,67.6,69.61,71.68,73,74.8,76.73,78.62,80.49,82.45,84.51,86.47,88.44,90.25,92.09,93.96,95.9,97.76,99.72,101.61,103.48,105.34,107.29,109.23,111.2,113.14,115.2,117.27,119.29,121.16,123,124.9,126.95,128.92,130.93,132.99,134.96,136.8,138.68,140.64,142.59,144.72,147.38,150.19],"remAll":[150.19,149.04,147.46,145.78,144.02,142.28,140.42,138.65,136.81,135.03,133.31,131.66,129.94,128.2,126.51,124.77,122.97,121.18,119.41,117.69,115.89,114.1,112.24,110.38,108.53,106.77,105.03,103.23,101.4,99.48,97.55,95.72,93.82,91.96,90.13,88.25,86.36,84.46,82.59,80.58,78.51,77.18,75.39,73.46,71.57,69.7,67.73,65.67,63.72,61.74,59.94,58.09,56.22,54.28,52.42,50.46,48.58,46.7,44.84,42.9,40.95,38.98,37.04,34.98,32.92,30.9,29.02,27.19,25.28,23.23,21.27,19.26,17.19,15.23,13.38,11.5,9.54,7.6,5.47,2.81,0],"remLe":[150.19,149.04,147.46,145.78,144.02,142.31,140.41,138.46,136.54,134.66,132.87,131.17,129.44,127.59,125.77,123.91,122.15,120.34,118.37,116.73,114.84,113.25,111.26,109.35,107.3,105.48,103.77,102.25,100.32,98.42,96.26,94.49,92.66,91.01,88.97,87.25,85.36,83.58,81.73,79.83,77.57,76.12,74.51,72.6,70.74,68.77,66.85,64.58,62.85,60.84,59.03,57.31,55.77,53.7,52,50.04,48.4,46.6,44.86,42.99,41.09,39.18,37.5,35.47,33.51,31.6,29.97,28.04,26.34,24.37,22.67,20.78,18.86,16.99,15.24,13.51,11.64,9.95,7.8,4.75,0],"remGt":[150.19,149.04,147.46,145.78,144.02,135,141.23,144.48,140.99,139.04,137.27,135.43,133.08,131.65,130.31,128.63,126.18,124.07,122.7,120.41,118.62,116.22,114.49,112.57,110.98,109.09,107.17,104.85,103.06,101.02,99.31,97.28,95.25,93.1,91.53,89.4,87.44,85.38,83.49,81.31,79.39,78.13,76.21,74.25,72.29,70.48,68.43,66.52,64.38,62.4,60.6,58.64,56.53,54.68,52.71,50.75,48.7,46.77,44.83,42.84,40.87,38.85,36.76,34.68,32.55,30.47,28.46,26.67,24.65,22.55,20.44,18.36,16.22,14.2,12.31,10.35,8.3,6.2,4.15,1.79,0],"cntLe":[1420,1420,1420,1420,1420,1414,1398,1374,1335,1301,1277,1256,1225,1208,1187,1161,1131,1101,1078,1049,1025,1013,987,965,945,915,895,888,860,840,821,797,783,777,777,757,738,727,727,701,687,669,687,680,660,647,630,618,615,596,597,581,577,577,577,576,580,576,571,570,562,549,549,541,538,538,530,538,532,532,530,528,524,525,520,519,526,528,512,490,500],"cntGt":[0,0,0,0,0,6,22,46,85,119,143,164,195,212,233,259,289,319,342,371,395,407,433,455,475,505,525,532,560,580,599,623,637,643,643,663,682,693,693,719,733,751,733,740,760,773,790,802,805,824,823,839,843,843,843,844,840,844,849,850,858,871,871,879,882,882,890,882,888,888,890,892,896,895,900,901,894,892,908,930,920]};
+// Quant Pace: projected final total from the scoring pattern of QCAL.games finished D1 games (30-second grid).
+// Starts from the league-average points left at this point of the game, scaled by how this game has run vs average,
+// and in the last stretch uses the points left for games within 10 vs more than 10.
+function interp(arr, x) { const i = Math.max(0, Math.min(arr.length - 2, Math.floor(x))), f = Math.max(0, Math.min(1, x - i)); return arr[i] + (arr[i + 1] - arr[i]) * f; }
+function quantProj(e, tot, mg) {
+  const P = QCAL.params;
+  if (e.period > 2) return tot + (QCAL.avgFinal / 40) * (e.statusName === "STATUS_HALFTIME" ? 0 : e.clock / 60);   // overtime: average rate for the time left in this period
+  const x = elapsedMin(e) * 2, base = interp(QCAL.cum, x), r = (tot + P.k) / (base + P.k), re = Math.max(0, 1 + P.a * (r - 1));
+  let rem = interp(QCAL.remAll, x);
+  if (x >= P.bf) { const le = mg <= 10, i = Math.min(QCAL.cum.length - 1, Math.round(x)); if ((le ? QCAL.cntLe : QCAL.cntGt)[i] >= 25) rem = interp(le ? QCAL.remLe : QCAL.remGt, x); }
+  return tot + re * rem;
+}
 function grade(p, e) {
   if (!e) return { kind: "missing" };
   if (/POSTPONED|CANCELED|CANCELLED|FORFEIT/.test(e.statusName)) return { kind: "void" };
@@ -235,13 +255,13 @@ function grade(p, e) {
     const t = p.teamId === e.away.id ? e.away : e.home, o = t === e.away ? e.home : e.away;
     cover = t.score + p.line - o.score;
   }
-  let result = cover > 0 ? "win" : cover < 0 ? "lose" : "push", pace = null;
+  let result = cover > 0 ? "win" : cover < 0 ? "lose" : "push", pace = null, quant = null;
   if (p.mkt === "T" && e.state === "in") {
-    pace = paceOf(e, tot);
-    if (pace == null) result = "early";
-    else { cover = p.dir === "over" ? pace - p.line : p.line - pace; result = Math.abs(cover) < 0.5 ? "push" : cover > 0 ? "win" : "lose"; }
+    pace = paceOf(e, tot); quant = quantProj(e, tot, Math.abs(e.away.score - e.home.score));
+    if (e.period <= 2 && elapsedMin(e) < 3) result = "early";
+    else { cover = p.dir === "over" ? quant - p.line : p.line - quant; result = Math.abs(cover) < 0.5 ? "push" : cover > 0 ? "win" : "lose"; }
   }
-  return { kind: e.state === "post" ? "final" : "live", result, cover, tot, pace };
+  return { kind: e.state === "post" ? "final" : "live", result, cover, tot, pace, quant };
 }
 // ---- Parser for the VSiN "CBB Leans" page text (copy the page, paste here) ----
 const PHRASES = [[/\bva commonwealth\b/g, "vcu"], [/\bbrigham young\b/g, "byu"], [/\btexas el paso\b/g, "utep"], [/\bcsu (bakersfield|northridge|fullerton)\b/g, "cal state $1"],
@@ -384,16 +404,26 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
   const logoHTML = t => '<span class="logo"><b>' + esc((t.abbr || t.name || "").slice(0, 4)) + "</b>" + (t.logo ? '<img src="' + esc(t.logo) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">' : "") + "</span>";
   function boardHTML(p, e, g) {
     const c = clockParts(e), started = e.state !== "pre", tied = e.away.score === e.home.score;
+    const hasLS = started && [e.away, e.home].every(t => t.ls && t.ls.length > 0);
+    const hasOT = hasLS && (e.period > 2 || e.away.ls.length > 2 || e.home.ls.length > 2);
+    const lsCells = t => {
+      if (!hasLS) return '<div class="ls"></div>';
+      const v = [t.ls[0], t.ls.length > 1 ? t.ls[1] : "–"];
+      if (hasOT) v.push(t.ls.length > 2 ? t.ls.slice(2).reduce((s, x) => s + x, 0) : "–");
+      return '<div class="ls">' + v.map(x => '<span class="lc">' + x + "</span>").join("") + "</div>";
+    };
+    const lhead = hasLS ? '<div class="trow lhead"><span></span><span></span><div class="ls"><span class="lc">1H</span><span class="lc">2H</span>' + (hasOT ? '<span class="lc">OT</span>' : "") + "</div><span></span></div>" : "";
     const rows = [e.away, e.home].map(t => {
       const other = t === e.away ? e.home : e.away, mine = p.mkt === "S" && t.id === p.teamId;
       const rk = t.rank ? '<span class="rk">' + t.rank + "</span>" : "";
-      return '<div class="trow">' + logoHTML(t) + '<div class="tmw"><div class="tn">' + rk + esc(t.name) + '</div><div class="mas">' + esc(t.mascot) + (mine ? '<span class="pk">Pick ' + signed(p.line) + "</span>" : "") + '</div></div><div class="sc' + (started && !tied && t.score < other.score ? " dim" : "") + '">' + (started ? t.score : "–") + "</div></div>";
+      return '<div class="trow">' + logoHTML(t) + '<div class="tmw"><div class="tn">' + rk + esc(t.name) + '</div><div class="mas">' + esc(t.mascot) + (mine ? '<span class="pk">Pick ' + signed(p.line) + "</span>" : "") + "</div></div>" + lsCells(t) + '<div class="sc' + (started && !tied && t.score < other.score ? " dim" : "") + '">' + (started ? t.score : "–") + "</div></div>";
     }).join("");
     let btm = "";
     if (p.mkt === "T") {
-      btm = '<div class="btm"><span>Total<b>' + (started ? g.tot : "–") + "</b></span><span>" + (p.dir === "over" ? "Over" : "Under") + "<b>" + fmt(p.line) + "</b></span>" + (g.pace != null ? "<span>Pace<b>" + Math.round(g.pace) + "</b></span>" : "") + "</div>";
+      btm = '<div class="btm"><span>Total<b>' + (started ? g.tot : "–") + "</b></span><span>" + (p.dir === "over" ? "Over" : "Under") + "<b>" + fmt(p.line) + "</b></span>" +
+        (g.quant != null ? '<span>Quant pace<b class="hl">' + f1(g.quant) + "</b></span>" : "") + (g.pace != null ? "<span>Straight pace<b>" + f1(g.pace) + "</b></span>" : "") + "</div>";
     }
-    return '<div class="board"><div class="btop ' + c.cls + '"><span class="cl-sub">' + (c.cls === "live" ? '<i class="livedot"></i>' : "") + esc(c.sub) + '</span><span class="cl-main">' + esc(c.main) + "</span></div>" + rows + btm + "</div>";
+    return '<div class="board"><div class="btop ' + c.cls + '"><span class="cl-sub">' + (c.cls === "live" ? '<i class="livedot"></i>' : "") + esc(c.sub) + '</span><span class="cl-main">' + esc(c.main) + "</span></div>" + lhead + rows + btm + "</div>";
   }
   function cardHTML(p) {
     const e = S.events.get(p.eventId), g = grade(p, e);
@@ -408,8 +438,8 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
       verdict = fin ? (g.result === "win" ? "WON" : g.result === "lose" ? "LOST" : "PUSH")
         : g.result === "early" ? "TOO EARLY" : (g.result === "win" ? "WINNING" : g.result === "lose" ? "LOSING" : "ON THE NUMBER");
       if (p.mkt === "T" && !fin) {
-        if (g.result === "early") delta = "Pace shows after 3 minutes of play. Total so far " + g.tot + ".";
-        else delta = "Pace " + Math.round(g.pace) + " vs " + fmt(p.line) + " (" + (g.pace - p.line >= 0 ? "+" : "−") + fmt(g.pace - p.line) + "), total now " + g.tot;
+        if (g.result === "early") delta = "Quant Pace shows after 3 minutes of play. Total so far " + g.tot + ".";
+        else delta = "Quant Pace " + f1(g.quant) + " vs " + fmt(p.line) + " (" + (g.quant - p.line >= 0 ? "+" : "−") + fmt(g.quant - p.line) + ")" + (g.pace != null ? ", Straightline Pace " + f1(g.pace) : "") + ", total now " + g.tot;
       } else if (g.result === "push") delta = fin ? "Final, graded as a push" : "Exactly on the line";
       else if (p.mkt === "T") delta = "Final total " + g.tot + ", " + fmt(g.cover) + (g.cover > 0 ? " on the right side of " : " on the wrong side of ") + fmt(p.line);
       else delta = (g.cover > 0 ? (fin ? "Covered by " : "Covering by ") : (fin ? "Missed by " : "Behind by ")) + fmt(g.cover) + (fin ? "" : " vs your line");

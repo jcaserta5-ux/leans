@@ -160,7 +160,7 @@ footer{font-size:.76rem;color:var(--muted)}
   </div>
   <section id="sheetHost"></section>
   <main class="cards" id="cards"></main>
-  <footer>Scores and DraftKings lines come from ESPN's public scoreboard and refresh every 2 seconds while a pick is live. Spreads are judged on the current score against the line you saved. Totals are judged on Quant Pace, a projection built from how scoring actually unfolds in 1420 finished Division I games (11/01 to 11/25), including the late surge in close games. Straightline Pace is shown for comparison. Overtime uses the average scoring rate. Finished games use the final score. Tracking tool, not betting advice.</footer>
+  <footer>Scores and DraftKings lines come from ESPN's public scoreboard and refresh every 2 seconds while a pick is live. Spreads are judged on the current score against the line you saved. Totals are judged on Quant Pace, a projection built from how scoring actually unfolds in 1420 finished Division I games (11/01 to 11/25), including the late surge in close games. Straightline Pace is shown for comparison. Overtime uses the average scoring rate. Finished games use the final score. Tracking tool, not betting advice. Version Nov 26 c.</footer>
 </div>
 
 <script>
@@ -386,7 +386,7 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
   async function fetchDate(d) {
     const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 12000);
     try {
-      const r = await fetch(ESPN + "?dates=" + d + "&groups=50&limit=400", { signal: ctl.signal, cache: "no-store" });
+      const r = await fetch(ESPN + "?dates=" + d + "&groups=50&limit=400&_=" + Date.now(), { signal: ctl.signal, cache: "no-store" });
       if (!r.ok) throw new Error("ESPN returned " + r.status);
       const j = await r.json();
       const evs = (j.events || []).map(parseEvent).filter(Boolean);
@@ -405,11 +405,11 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
   function neededDates() { const s = new Set(S.picks.map(p => p.date)); s.add(today()); if (S.sheet) s.add(S.viewDate); return [...s]; }
   async function refresh(manual) {
     if (S.loading) return;
-    S.loading = true; if (manual === true) $("refreshBtn").disabled = true;
+    S.loading = true; S.lastTry = Date.now(); if (manual === true) $("refreshBtn").disabled = true;
     try { await Promise.all(neededDates().map(fetchDate)); S.lastOk = new Date(); S.err = null; }
     catch (e) { S.err = e && e.name === "AbortError" ? "ESPN timed out" : (e && e.message) || "Network error"; }
     S.loading = false; $("refreshBtn").disabled = false;
-    render(); schedule();
+    try { render(); } catch (x) { S.err = "Display error: " + (x && x.message); } finally { schedule(); }
   }
   function anyLive() { return S.picks.some(p => { const e = S.events.get(p.eventId); return e && e.state === "in"; }); }
   function soon() { return S.picks.some(p => { const e = S.events.get(p.eventId); return e && e.state === "pre" && new Date(e.start) - Date.now() < 45 * 60000; }); }
@@ -419,6 +419,14 @@ const looksLikePage = s => /(\bwindow\b|snapshot|No lean:|CBB Leans|info only|Pr
     S.timer = setTimeout(refresh, anyLive() ? 2000 : soon() ? 15000 : 60000);
   }
   document.addEventListener("load", ev => { const i = ev.target; if (i && i.tagName === "IMG" && i.parentNode && i.parentNode.classList.contains("logo")) i.parentNode.classList.add("ok"); }, true);
+  window.addEventListener("pageshow", () => refresh());
+  // Safety net for phones: if the update loop ever stalls (suspended tab, dropped request), restart it.
+  setInterval(() => {
+    if (document.hidden) return;
+    const gap = Date.now() - (S.lastTry || 0), want = anyLive() ? 2000 : soon() ? 15000 : 60000;
+    if (S.loading && gap > 20000) S.loading = false;
+    if (!S.loading && gap > want + 6000) refresh();
+  }, 4000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); else clearTimeout(S.timer); });
 
   const periodLabel = e => e.period <= 0 ? "" : e.period === 1 ? "1st half" : e.period === 2 ? "2nd half" : e.period === 3 ? "OT" : (e.period - 2) + "OT";
